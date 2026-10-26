@@ -9,7 +9,8 @@ ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x
 def clean(text):
     """Normalise newlines and strip terminal escape sequences (ConPTY emits them on Windows)."""
     text = ANSI.sub('', text)
-    return text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    return re.sub(r'[ \t]+\n', '\n', text)
 
 
 def parse_candidates(text):

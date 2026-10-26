@@ -24,20 +24,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: System libraries for the official NuSMV build
+      - name: System libraries for the official NuSMV build (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxml2 libedit2
+      - name: System libraries for the official NuSMV build (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gmp libedit
       - run: pip install . pytest
       - name: Download NuSMV (same path end users take)
         run: smv-tracelab --install-nusmv
       - name: NuSMV smoke test
         shell: bash
         run: |
-          EXE=$(python -c "from smv_tracelab.nusmv_bin import find_nusmv; print(find_nusmv())")
-          echo "$EXE"
-          if [ "$RUNNER_OS" = macOS ]; then otool -L "$EXE"; fi
-          printf 'MODULE main\nVAR x : boolean;\n' > smoke.smv
-          "$EXE" smoke.smv
+          printf 'MODULE main\nVAR x : boolean;\nCTLSPEC AG x\n' > smoke.smv
+          python - <<'PY'
+          import subprocess, sys
+          from smv_tracelab.nusmv_bin import find_nusmv, runtime_env
+          exe = find_nusmv(); env, missing = runtime_env(exe)
+          print(exe, 'missing:', missing)
+          r = subprocess.run([exe, 'smoke.smv'], env=env, capture_output=True, text=True)
+          print(r.stdout[-400:], r.stderr[-400:])
+          sys.exit(0 if 'is false' in r.stdout else 1)
+          PY
       - run: python -m pytest -v tests
         timeout-minutes: 10
 

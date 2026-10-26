@@ -2,6 +2,7 @@
 import io
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -87,9 +88,20 @@ def download_nusmv(log=print):
     return exe
 
 
-LIB_HINT = ('NuSMV needs shared libraries that are missing: %s\n'
-            '  Debian/Ubuntu: sudo apt install libxml2 libedit2\n'
-            '  Fedora/RHEL  : sudo dnf install libxml2 libedit')
+if sys.platform == 'darwin':
+    LIB_HINT = ('NuSMV needs shared libraries that are missing: %s\n'
+                '  Homebrew: brew install gmp libedit\n'
+                '  MacPorts: sudo port install gmp libedit libxml2')
+else:
+    LIB_HINT = ('NuSMV needs shared libraries that are missing: %s\n'
+                '  Debian/Ubuntu: sudo apt install libxml2 libedit2\n'
+                '  Fedora/RHEL  : sudo dnf install libxml2 libedit')
+
+# The official macOS build links against MacPorts paths (/opt/local/lib/libedit.0.dylib, libgmp.10.dylib,
+# libxml2.2.dylib). dyld retries the leaf name in DYLD_FALLBACK_LIBRARY_PATH, so Homebrew copies work too.
+DARWIN_LIB_DIRS = ['/opt/homebrew/opt/libedit/lib', '/opt/homebrew/opt/gmp/lib', '/opt/homebrew/opt/libxml2/lib',
+                   '/opt/homebrew/lib', '/usr/local/opt/libedit/lib', '/usr/local/opt/gmp/lib',
+                   '/usr/local/opt/libxml2/lib', '/usr/local/lib', '/opt/local/lib', '/usr/lib']
 
 
 def _missing_libs(exe, env):
@@ -98,6 +110,14 @@ def _missing_libs(exe, env):
     except (OSError, subprocess.SubprocessError):
         return []
     return [line.split()[0] for line in out.splitlines() if 'not found' in line]
+
+
+def _missing_darwin(exe, env):
+    try:
+        r = subprocess.run([exe, '-h'], capture_output=True, text=True, env=env, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [os.path.basename(m) for m in re.findall(r'Library not loaded: (\S+)', r.stdout + r.stderr)]
 
 
 def _find_system_lib(prefix):
@@ -123,6 +143,11 @@ def runtime_env(exe):
     (same API). If only the soname differs, a symlink in a private directory on LD_LIBRARY_PATH fixes it.
     """
     env = dict(os.environ)
+    if sys.platform == 'darwin':
+        dirs = [d for d in DARWIN_LIB_DIRS if os.path.isdir(d)]
+        env['DYLD_FALLBACK_LIBRARY_PATH'] = os.pathsep.join(
+            [p for p in (env.get('DYLD_FALLBACK_LIBRARY_PATH'),) if p] + dirs)
+        return env, _missing_darwin(exe, env)
     if not sys.platform.startswith('linux'):
         return env, []
     missing = _missing_libs(exe, env)

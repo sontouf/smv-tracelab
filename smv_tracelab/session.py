@@ -13,12 +13,13 @@ from .parsing import (clean, parse_candidates, parse_check_results, parse_proper
                       parse_trace_count, parse_vars)
 
 # Prompts on which NuSMV waits for stdin, matched at the end of the output buffer.
+# Trailing [ \t]* tolerates the blank padding ConPTY (Windows) writes after a prompt.
 PROMPTS = [
-    ('idle', re.compile(r'NuSMV > $')),
-    ('choose', re.compile(r'Choose a state from the above \((\d+)-(\d+)\): ?$')),
+    ('idle', re.compile(r'NuSMV >[ \t]*$')),
+    ('choose', re.compile(r'Choose a state from the above \((\d+)-(\d+)\):[ \t]*$')),
     ('single', re.compile(r"There's only one available state\. Press Return to Proceed\.\s*$")),
     ('constraint', re.compile(r'Too many \((\S+)\) (?:future |initial )?states to visualize\. '
-                              r'Please specify further constraints:\s*\n> ?$')),
+                              r'Please specify further constraints:\s*\n>[ \t]*$')),
 ]
 CHECK_CMDS = {'ctl': 'check_ctlspec', 'ltl': 'check_ltlspec', 'invar': 'check_invar'}
 
@@ -100,7 +101,7 @@ class Session:
 
     @staticmethod
     def _strip_prompt(text):
-        return re.sub(r'NuSMV > $', '', text).rstrip('\n')
+        return re.sub(r'NuSMV >[ \t]*$', '', text).rstrip('\n')
 
     def _kill(self):
         if self.p is not None:
