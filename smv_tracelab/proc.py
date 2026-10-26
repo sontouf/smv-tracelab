@@ -165,7 +165,8 @@ class WinPty(_Base):
             return self.text.partial()
 
     def write(self, text):
-        self.proc.write(text.replace('\n', '\r\n'))
+        # A console Enter is a single CR; CRLF would be read as two Enters (an extra empty command).
+        self.proc.write(text.replace('\n', '\r'))
 
     def alive(self):
         return self.proc.isalive()
