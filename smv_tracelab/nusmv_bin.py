@@ -13,6 +13,10 @@ from pathlib import Path
 
 NUSMV_VERSION = '2.7.1'
 BASE_URL = 'https://nusmv.fbk.eu/distrib/%s/' % NUSMV_VERSION
+# The official macOS build is x86_64-only and linked to MacPorts libraries, so macOS uses a
+# self-contained universal build of the same source (.github/workflows/nusmv-macos.yml).
+MACOS_URL = ('https://github.com/sontouf/smv-tracelab/releases/download/nusmv-%s/NuSMV-%s-macos-universal.tar.gz'
+             % (NUSMV_VERSION, NUSMV_VERSION))
 EXE = 'NuSMV.exe' if sys.platform == 'win32' else 'NuSMV'
 
 
@@ -26,14 +30,14 @@ def cache_dir():
     return base / 'smv-tracelab'
 
 
-def _archive_name():
+def _archive_url():
     machine = platform.machine().lower()
     if sys.platform == 'win32' and machine in ('amd64', 'x86_64', 'arm64'):
-        return 'NuSMV-%s-win64.zip' % NUSMV_VERSION
+        return BASE_URL + 'NuSMV-%s-win64.zip' % NUSMV_VERSION
     if sys.platform == 'darwin':
-        return 'NuSMV-%s-macos-universal.tar.xz' % NUSMV_VERSION
+        return MACOS_URL
     if sys.platform.startswith('linux') and machine in ('x86_64', 'amd64'):
-        return 'NuSMV-%s-linux64.tar.xz' % NUSMV_VERSION
+        return BASE_URL + 'NuSMV-%s-linux64.tar.xz' % NUSMV_VERSION
     return None
 
 
@@ -55,11 +59,10 @@ def find_nusmv(explicit=None):
 
 
 def download_nusmv(log=print):
-    name = _archive_name()
-    if not name:
+    url = _archive_url()
+    if not url:
         raise RuntimeError('there is no official NuSMV binary for %s/%s; build it from source '
                            '(https://nusmv.fbk.eu) and pass --nusmv' % (sys.platform, platform.machine()))
-    url = BASE_URL + name
     dest = cache_dir() / ('NuSMV-' + NUSMV_VERSION)
     log('Downloading NuSMV %s: %s' % (NUSMV_VERSION, url))
     log('  (NuSMV is LGPL-2.1 software by FBK-irst, https://nusmv.fbk.eu)')
@@ -68,12 +71,12 @@ def download_nusmv(log=print):
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
-    if name.endswith('.zip'):
+    if url.endswith('.zip'):
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             members = [m for m in z.namelist() if '/bin/' in m]
             z.extractall(dest, members=members)
     else:
-        with tarfile.open(fileobj=io.BytesIO(data), mode='r:xz') as t:
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:*') as t:
             members = [m for m in t.getmembers() if '/bin/' in m.name and (m.isfile() or m.isdir())]
             for m in members:
                 if m.name.startswith('/') or '..' in Path(m.name).parts:

@@ -11,8 +11,6 @@ jobs:
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
-    # The official macOS NuSMV binary is x86_64-only and linked to MacPorts paths (see README).
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -29,9 +27,6 @@ jobs:
       - name: System libraries for the official NuSMV build (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxml2 libedit2
-      - name: System libraries for the official NuSMV build (macOS)
-        if: runner.os == 'macOS'
-        run: brew install gmp libedit
       - run: pip install . pytest
       - name: Download NuSMV (same path end users take)
         run: smv-tracelab --install-nusmv
@@ -48,11 +43,6 @@ jobs:
           print(r.stdout[-400:], r.stderr[-400:])
           sys.exit(0 if 'is false' in r.stdout else 1)
           PY
-      - name: ConPTY probe (Windows diagnostics)
-        if: runner.os == 'Windows'
-        working-directory: examples
-        run: |
-          python -c "import time; from smv_tracelab import proc; from smv_tracelab.nusmv_bin import find_nusmv; p = proc.spawn([find_nusmv(), '-int', 'counter.smv'], cwd='.'); time.sleep(3); print(repr(p.read(1)[-300:]), repr(p.partial())); [(p.write(c + '\n'), time.sleep(2), print('>>>', c, repr(p.read(1)[:1500]), repr(p.partial()))) for c in ['go', 'show_vars -i', 'pick_state -i -a', '1']]"
       - run: python -m pytest -v tests
         timeout-minutes: 10
 

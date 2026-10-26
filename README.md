@@ -80,8 +80,8 @@ NuSMV와 주고받은 원본 입출력을 모두 볼 수 있고, 임의의 NuSMV
 | 플랫폼 | 자동 다운로드 | 비고 |
 |---|---|---|
 | Linux x86_64 | `NuSMV-2.7.1-linux64` | `libxml2`, `libedit`가 필요합니다 (`sudo apt install libxml2 libedit2`). Debian/Ubuntu의 `libedit.so.2`는 자동으로 연결됩니다. |
-| macOS (Intel/Apple Silicon) | `NuSMV-2.7.1-macos-universal` | |
-| Windows x64 | `NuSMV-2.7.1-win64` | `pywinpty`가 함께 설치됩니다. |
+| macOS (Apple Silicon/Intel) | [이 저장소 Release의 universal 빌드](https://github.com/sontouf/smv-tracelab/releases/tag/nusmv-2.7.1) | FBK 공식 macOS 바이너리는 x86_64 전용이고 MacPorts 라이브러리에 링크되어 있어 일반 Mac에서 실행되지 않습니다. 그래서 수정하지 않은 공식 소스를 [CI에서 직접 빌드](.github/workflows/nusmv-macos.yml)한 자체 완결형 바이너리를 씁니다 (GMP/libxml2 제외, 시스템 libedit). |
+| Windows x64 | `NuSMV-2.7.1-win64` | `pywinpty`와 `pyte`가 함께 설치됩니다. |
 | 그 외 (Linux ARM 등) | 없음 | 소스에서 빌드한 뒤 `--nusmv`로 지정하세요. |
 
 미리 받아 두려면 `smv-tracelab --install-nusmv`를 실행하세요. `--no-download`를 주면 자동 다운로드를 끕니다.
@@ -91,7 +91,7 @@ NuSMV는 FBK-irst가 LGPL 2.1로 배포하는 별도 소프트웨어이며, 이 
 
 ```
 브라우저 ──HTTP/JSON──▶ smv-tracelab (Python 표준 라이브러리 HTTP 서버)
-                              │  pty (Linux/macOS) / ConPTY (Windows)
+                              │  pty (Linux/macOS) / ConPTY + pyte (Windows)
                               ▼
                          NuSMV -int model.smv
 ```
@@ -99,7 +99,8 @@ NuSMV는 FBK-irst가 LGPL 2.1로 배포하는 별도 소프트웨어이며, 이 
 - NuSMV를 파이프에 연결하면 출력이 버퍼에 쌓여서, 선택지 목록이 *답을 보낸 뒤에야* 나옵니다. 그래서 **가상 터미널(pty)** 에 연결합니다.
 - 출력 끝에 나오는 프롬프트(`NuSMV >`, `Choose a state…`, `Press Return…`, `further constraints: >`)를 보고 NuSMV가 무엇을 기다리는지 판단합니다.
 - 후보 목록은 항상 `-a` 옵션으로 받습니다. `-a`가 없으면 NuSMV가 이전 후보와 달라진 변수만 출력합니다.
-- 외부 의존성이 없습니다 (Windows에서만 `pywinpty` 사용). UI는 단일 HTML 파일이며 CDN을 쓰지 않아 오프라인에서도 동작합니다.
+- Windows의 ConPTY는 프로그램 출력을 그대로 넘기지 않고 가상 화면을 다시 그립니다(커서 이동, 공백 채우기, 입력 에코). 그래서 [`pyte`](https://github.com/selectel/pyte) 터미널 에뮬레이터로 화면을 재현해 텍스트를 복원합니다.
+- Linux/macOS에서는 외부 의존성이 없습니다 (Windows에서만 `pywinpty`, `pyte` 사용). UI는 단일 HTML 파일이며 CDN을 쓰지 않아 오프라인에서도 동작합니다.
 
 ## 주의
 
