@@ -63,12 +63,15 @@ class Session:
         end = time.time() + timeout
         while True:
             self.buf += clean(self.p.read(0.1))
-            if echo and '\n' in self.buf and self.buf.split('\n', 1)[0].rstrip().endswith(echo):
-                # ConPTY (Windows) echoes the line we typed after the prompt.
-                self.buf = self.buf.split('\n', 1)[1]
+            if echo is not None and '\n' in self.buf:
+                # ConPTY (Windows) echoes the typed line after the old prompt. Until that line is
+                # complete, the "current line" is still the old prompt, so do not match prompts yet.
+                first, rest = self.buf.split('\n', 1)
+                if first.rstrip().endswith(echo):
+                    self.buf = rest
                 echo = None
             view = self.buf + clean(self.p.partial())
-            for name, rx in PROMPTS:
+            for name, rx in PROMPTS if echo is None else ():
                 m = rx.search(view)
                 if m:
                     self.buf = view
