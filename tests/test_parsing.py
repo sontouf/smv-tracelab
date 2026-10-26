@@ -101,4 +101,5 @@ def test_misc():
     assert parse_vars('Number of State Variables: 1\n  cnt : {0, 1}\n') == [{'name': 'cnt', 'type': '{0, 1}'}]
     r = parse_check_results('-- specification AG x  is false\n-- invariant y  is true\n')
     assert r == [{'formula': 'AG x', 'result': 'false'}, {'formula': 'y', 'result': 'true'}]
-    assert clean('\x1b[?25lNuSMV > \x1b[0m\r\n') == 'NuSMV > \n'
+    assert clean('\x1b[?25lNuSMV > \x1b[0m\r\n') == 'NuSMV >\n'
+    assert clean('NuSMV >' + ' ' * 50) == 'NuSMV >' + ' ' * 50  # trailing prompt padding is kept for the prompt regex
