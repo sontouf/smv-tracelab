@@ -1,0 +1,60 @@
+# Builds NuSMV from the unmodified FBK source as a self-contained macOS universal (arm64 + x86_64)
+# binary and publishes it as a release asset. The official macOS binary is x86_64-only and links
+# against MacPorts libraries, so it does not run on a stock Mac.
+name: Build NuSMV for macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  NUSMV_VERSION: '2.7.1'
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Tools
+        run: |
+          brew install bison flex meson ninja pkg-config
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
+      - name: Source
+        run: curl -fsSL "https://nusmv.fbk.eu/distrib/${NUSMV_VERSION}/NuSMV-${NUSMV_VERSION}.tar.xz" | tar -xJ
+      - name: Build
+        working-directory: NuSMV-${{ env.NUSMV_VERSION }}
+        run: |
+          meson setup build --buildtype=release \
+            -Dbuild-universal-binary=enabled -Dbuild-doc=disabled -Dwith-gtest=disabled \
+            -Dwith-bignumbers=disabled -Dwith-libxml2=disabled -Dwith-shell=enabled -Dwith-minisat=enabled
+          meson compile -C build NuSMV
+      - name: Check
+        working-directory: NuSMV-${{ env.NUSMV_VERSION }}
+        run: |
+          file build/NuSMV
+          otool -L build/NuSMV
+          printf 'MODULE main\nVAR x : boolean;\nCTLSPEC AG x\n' > smoke.smv
+          ./build/NuSMV smoke.smv | tee out.txt
+          grep -q 'is false' out.txt
+          arch -x86_64 ./build/NuSMV smoke.smv | grep -q 'is false'
+      - name: Package
+        run: |
+          D="NuSMV-${NUSMV_VERSION}-macos-universal"
+          mkdir -p "$D/bin"
+          cp "NuSMV-${NUSMV_VERSION}/build/NuSMV" "$D/bin/"
+          cp "NuSMV-${NUSMV_VERSION}/LGPL-2.1" "NuSMV-${NUSMV_VERSION}/COPYING" "$D/"
+          printf 'NuSMV %s built from the unmodified FBK source:\nhttps://nusmv.fbk.eu/distrib/%s/NuSMV-%s.tar.xz\nmeson options: universal binary, no GMP, no libxml2, system libedit.\nLicense: LGPL 2.1 (see LGPL-2.1). NuSMV is developed by FBK-irst.\n' \
+            "$NUSMV_VERSION" "$NUSMV_VERSION" "$NUSMV_VERSION" > "$D/README.txt"
+          tar -czf "$D.tar.gz" "$D"
+          shasum -a 256 "$D.tar.gz"
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="nusmv-${NUSMV_VERSION}"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "NuSMV ${NUSMV_VERSION} for macOS (universal)" \
+              --notes "Self-contained macOS build (arm64 + x86_64) of NuSMV ${NUSMV_VERSION} from the unmodified FBK source, downloaded automatically by SMV TraceLab on macOS. NuSMV is LGPL-2.1 software by FBK-irst: https://nusmv.fbk.eu (source: https://nusmv.fbk.eu/distrib/${NUSMV_VERSION}/NuSMV-${NUSMV_VERSION}.tar.xz)"
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber "NuSMV-${NUSMV_VERSION}-macos-universal.tar.gz"
