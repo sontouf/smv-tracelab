@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smv-tracelab"
+dynamic = ["version"]
+description = "Browser GUI for NuSMV: interactive simulation, trace-to-FSM visualisation and property verification with counterexample playback."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "sontouf"}]
+requires-python = ">=3.9"
+dependencies = ["pywinpty>=2.0; sys_platform == 'win32'"]
+keywords = ["nusmv", "model-checking", "smv", "simulation", "fsm", "ltl", "ctl", "formal-verification"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+Homepage = "https://github.com/sontouf/smv-tracelab"
+
+[project.scripts]
+smv-tracelab = "smv_tracelab.cli:main"
+
+[tool.setuptools]
+packages = ["smv_tracelab"]
+
+[tool.setuptools.dynamic]
+version = {attr = "smv_tracelab.__version__"}
+
+[tool.setuptools.package-data]
+smv_tracelab = ["static/*"]

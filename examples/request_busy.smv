@@ -1,0 +1,29 @@
+-- Request/busy handshake. Two of the four properties are false.
+MODULE main
+VAR
+    request : boolean;
+    state : {ready, busy};
+
+ASSIGN
+    init(state) := ready;
+    next(state) := case
+        state = ready & request = TRUE : busy;
+        TRUE : {ready, busy};
+    esac;
+
+
+-- CTL 1: 대기 중 요청이 있으면 다음 단계에는 반드시 busy
+CTLSPEC
+    AG ((state = ready & request) -> AX (state = busy))
+
+-- CTL 2: busy가 되면 반드시 언젠가 ready로 돌아옴
+CTLSPEC
+    AG (state = busy -> AF (state = ready))
+
+-- LTL 1: 대기 중 요청이 있으면 다음 단계에는 busy
+LTLSPEC
+    G ((state = ready & request) -> X (state = busy))
+
+-- LTL 2: busy가 되면 반드시 언젠가 ready로 돌아옴
+LTLSPEC
+    G (state = busy -> F (state = ready))

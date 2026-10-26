@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMV TraceLab</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='8' cy='16' r='5' fill='%232f6fde'/><circle cx='24' cy='8' r='5' fill='%232f6fde'/><circle cx='24' cy='24' r='5' fill='%232f6fde'/><path d='M13 14l6-4M13 18l6 4' stroke='%232f6fde' stroke-width='2.5'/></svg>">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --line:#dde1e7; --text:#1d2330; --muted:#6b7385; --faint:#b8bfcb;
+  --accent:#2f6fde; --accent-soft:#e6eefc; --chg:#fff1c2; --chg-text:#7a5300;
+  --in:#e7f6ec; --in-text:#1d6b3a; --def:#f3eefc; --def-text:#5b3c99;
+  --err:#c93434; --err-soft:#fdeaea; --ok:#2a8a4a; --ok-soft:#e3f5ea; --pend:#eef1f5;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "D2Coding", monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171c; --panel:#1c2027; --line:#2e343e; --text:#e3e7ee; --muted:#9099a8; --faint:#4a5260;
+    --accent:#6c9cff; --accent-soft:#22304a; --chg:#4a3d12; --chg-text:#ffd56a;
+    --in:#163626; --in-text:#7fe0a2; --def:#2c2443; --def-text:#c3a8ff;
+    --err:#ff7676; --err-soft:#3d1f22; --ok:#5fd18a; --ok-soft:#173523; --pend:#232831;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+header h1 span{color:var(--accent)}
+header .sub{color:var(--muted);font-size:12px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.badge{padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--pend);color:var(--muted);white-space:nowrap}
+.badge.idle,.badge.True{background:var(--ok-soft);color:var(--ok)}
+.badge.choose,.badge.single,.badge.constraint,.badge.busy{background:var(--chg);color:var(--chg-text)}
+.badge.dead,.badge.none,.badge.False{background:var(--err-soft);color:var(--err)}
+.layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;padding:14px 16px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:14px;min-width:0}
+.panel h2{font-size:13px;margin:0 0 10px;font-weight:650;display:flex;align-items:center;gap:8px}
+.hint{font-weight:400;color:var(--muted);font-size:12px}
+label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
+input[type=text],input[type=number],select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:13px var(--mono);min-width:0}
+input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.row{display:flex;gap:6px;align-items:center}
+.row>*{flex:1}
+.row>.fix{flex:0 0 auto}
+button{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover:not(:disabled){filter:brightness(1.08);color:#fff}
+button.danger{color:var(--err)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.sm{padding:3px 8px;font-size:12px}
+button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.mt{margin-top:8px}
+.muted{color:var(--muted)}
+.check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin:8px 0 0;white-space:nowrap}
+.check input{margin:0}
+#err{display:none;background:var(--err-soft);color:var(--err);border:1px solid var(--err);border-radius:8px;padding:8px 12px;margin-bottom:14px;white-space:pre-wrap;font-size:13px}
+.tablewrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:separate;border-spacing:0;font:12.5px var(--mono);width:max-content;min-width:100%}
+th,td{padding:4px 9px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);text-align:left;white-space:nowrap}
+thead th{position:sticky;top:0;background:var(--panel);z-index:2;font-weight:600}
+th.vname,td.vname{position:sticky;left:0;background:var(--panel);z-index:1;font-weight:500}
+thead th.vname{z-index:3}
+td.chg{background:var(--chg);color:var(--chg-text);font-weight:600}
+tr.grp td{background:var(--bg);color:var(--muted);font:600 11px system-ui,sans-serif;letter-spacing:.04em}
+.kind{display:inline-block;font:600 10px system-ui,sans-serif;padding:0 5px;border-radius:4px;margin-right:6px;vertical-align:1px}
+.kind.i{background:var(--in);color:var(--in-text)}
+.kind.s{background:var(--accent-soft);color:var(--accent)}
+.kind.d{background:var(--def);color:var(--def-text)}
+th.step{cursor:pointer}
+th.step:hover{color:var(--accent)}
+th.pend,td.pend{background:var(--pend);font-style:italic}
+td.pend.chg{background:var(--chg);color:var(--chg-text)}
+th.cursor{background:var(--accent);color:#fff}
+td.cursor{box-shadow:inset 2px 0 0 var(--accent),inset -2px 0 0 var(--accent)}
+td.future{opacity:.4}
+#choicePanel{border-color:var(--accent);display:none}
+#choicePanel.on{display:block}
+.cand tbody tr{cursor:pointer}
+.cand tbody tr:hover td{background:var(--accent-soft)}
+.cand td.idx{font-weight:700;color:var(--accent)}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.toolbar .grow{flex:1}
+.seg{display:inline-flex}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}
+.seg button:last-child{border-radius:0 6px 6px 0}
+#console{background:#0f1217;color:#cfd6e3;font:12px/1.45 var(--mono);border-radius:8px;padding:10px;height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:8px}
+#console .cmd{color:#7fb4ff}
+#console .cmd::before{content:"NuSMV > ";color:#5d6b82}
+#console .err{color:#ff8080}
+#console .info{color:#8fd19e}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center;margin-bottom:8px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+.empty{color:var(--muted);padding:20px;text-align:center;font-size:13px}
+details>summary{cursor:pointer;color:var(--muted);font-size:12px}
+.srcbox{max-height:300px;overflow:auto;font:12px/1.4 var(--mono);white-space:pre;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:6px}
+/* verifier */
+.props td{vertical-align:middle}
+.props td.formula{white-space:normal;min-width:240px;max-width:520px;word-break:break-word}
+.props tr.sel td{background:var(--accent-soft)}
+.vresult{margin-top:8px;font-size:13px;padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--line)}
+.vresult .t{color:var(--ok);font-weight:650}.vresult .f{color:var(--err);font-weight:650}
+.vresult pre{margin:6px 0 0;white-space:pre-wrap;color:var(--err);font:12px var(--mono)}
+/* playback */
+.play{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);margin-bottom:10px}
+.play input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+.play .pos{font:12px var(--mono);color:var(--muted);min-width:110px;text-align:center}
+/* fsm */
+#fsmWrap{position:relative;border:1px solid var(--line);border-radius:8px;background:var(--bg);height:460px;overflow:hidden;touch-action:none}
+#fsmWrap svg{width:100%;height:100%;display:block;cursor:grab;user-select:none}
+#fsmWrap svg.panning{cursor:grabbing}
+.fsmtools{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
+.fsminfo{position:absolute;left:8px;bottom:8px;font:11.5px var(--mono);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.projbox{display:flex;flex-wrap:wrap;gap:4px 12px;max-height:150px;overflow:auto;padding:6px 0}
+.projbox label{display:flex;align-items:center;gap:4px;margin:0;font:12px var(--mono);color:var(--text)}
+.pane-fsm,.pane-table{margin-bottom:10px}
+</style>
+<style id="fsmCss">
+.fn rect{fill:var(--panel);stroke:var(--faint);stroke-width:1.2}
+.fn text{fill:var(--text);font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.fn.visited rect{stroke:var(--muted);stroke-width:1.6}
+.fn.future{opacity:.35}
+.fn.cur rect{fill:var(--accent);stroke:var(--accent);stroke-width:2}
+.fn.cur text{fill:#fff;font-weight:700}
+.fn.init rect{stroke-width:2.4}
+.fn.pend rect{stroke-dasharray:4 3}
+.fn .badge-loop{fill:var(--def-text);font-weight:700}
+.fe path{fill:none;stroke:var(--faint);stroke-width:1.3}
+.fe.trav path{stroke:var(--muted);stroke-width:1.8}
+.fe.now path{stroke:var(--accent);stroke-width:2.8}
+.fe.pend path{stroke-dasharray:5 4}
+.fe text{fill:var(--muted);font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+.fe.now text{fill:var(--accent);font-weight:700}
+.fe.future{opacity:.35}
+.arrow{fill:var(--faint)}.arrow.trav{fill:var(--muted)}.arrow.now{fill:var(--accent)}
+.initarrow{stroke:var(--text);stroke-width:1.6;fill:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>SMV <span>TraceLab</span></h1>
+  <span class="badge" id="modeBadge">—</span>
+  <span class="sub" id="hdrSub"></span>
+</header>
+
+<div class="layout">
+<aside>
+  <div class="panel">
+    <h2>모델</h2>
+    <select id="modelSelect" aria-label=".smv 파일 목록"></select>
+    <label>경로 직접 입력</label>
+    <input type="text" id="modelPath" placeholder="model.smv">
+    <div class="row mt">
+      <button class="primary" id="btnLoad">로드 (go)</button>
+      <button class="fix" id="btnRestart" title="같은 모델로 NuSMV 재시작">재시작</button>
+    </div>
+    <label>또는 파일 업로드</label>
+    <input type="file" id="fileUp" accept=".smv,.txt" style="font-size:12px;max-width:100%">
+    <div id="loadInfo" class="muted mt" style="font-size:12px"></div>
+    <details class="mt"><summary>모델 소스 보기</summary><div class="srcbox" id="srcBox"></div></details>
+  </div>
+
+  <div class="panel">
+    <h2>초기 상태 <span class="hint">pick_state</span></h2>
+    <input type="text" id="initC" placeholder="-c 제약 (선택)">
+    <div class="row mt">
+      <button class="primary" id="btnPickI">직접 선택</button>
+      <button id="btnPickR">랜덤</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>시뮬레이션 <span class="hint">simulate</span></h2>
+    <div class="row"><label style="margin:0;flex:0 0 auto">스텝 수 -k</label><input type="number" id="simK" value="1" min="1"></div>
+    <label>-c 제약 (다음 상태의 식)</label>
+    <input type="text" id="simC" placeholder="예: request = TRUE">
+    <label>-t 제약 (next 식)</label>
+    <input type="text" id="simT" placeholder="예: next(x) != x">
+    <div class="row mt">
+      <button class="primary" id="btnSimI">직접 선택</button>
+      <button id="btnSimR">랜덤</button>
+    </div>
+    <label class="check"><input type="checkbox" id="autoSingle" checked> 후보가 1개면 자동 진행</label>
+    <div class="muted" style="font-size:12px;margin-top:8px">현재 시뮬레이션 trace: <b id="simTraceNo">—</b></div>
+  </div>
+
+  <div class="panel">
+    <h2>NuSMV 명령 직접 전송</h2>
+    <div class="row">
+      <input type="text" id="rawCmd" placeholder="예: print_reachable_states">
+      <button class="fix" id="btnRaw">전송</button>
+    </div>
+  </div>
+</aside>
+
+<main style="min-width:0">
+  <div id="err"></div>
+
+  <div class="panel" id="choicePanel">
+    <h2 id="choiceTitle">다음 상태 선택</h2>
+    <div id="choiceBody"></div>
+  </div>
+
+  <div class="panel" id="verifierPanel">
+    <div class="toolbar">
+      <h2 style="margin:0">Verifier <span class="hint">check_property</span></h2>
+      <span class="grow"></span>
+      <button class="sm" id="btnCheckAll">전체 검사</button>
+      <button class="sm" id="btnVerToggle">접기</button>
+    </div>
+    <div id="verBody">
+      <div class="row" style="flex-wrap:wrap">
+        <select id="adhocKind" class="fix" style="width:auto"><option value="ltl">LTL</option><option value="ctl">CTL</option><option value="invar">INVAR</option></select>
+        <input type="text" id="adhocF" placeholder="식 직접 검사 — 예: G (request -> F state = busy)" style="flex:1 1 240px">
+        <button class="fix primary" id="btnAdhoc">검사</button>
+      </div>
+      <div id="verResult"></div>
+      <div id="propsBox" class="mt"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="toolbar">
+      <h2 style="margin:0">Trace</h2>
+      <select id="traceSel" style="width:auto;max-width:360px" aria-label="trace 선택"></select>
+      <span class="grow"></span>
+      <div class="seg" role="group" aria-label="보기">
+        <button class="sm" data-v="both">FSM + 표</button>
+        <button class="sm" data-v="fsm">FSM</button>
+        <button class="sm" data-v="table">표</button>
+      </div>
+    </div>
+    <div class="play" id="playBar">
+      <button class="sm" id="pFirst" title="처음">⏮</button>
+      <button class="sm" id="pPrev" title="이전 (←)">◀</button>
+      <button class="sm" id="pPlay" title="재생/정지 (Space)" style="min-width:52px">▶ 재생</button>
+      <button class="sm" id="pNext" title="다음 (→)">▶</button>
+      <button class="sm" id="pLast" title="끝">⏭</button>
+      <input type="range" id="pRange" min="0" max="0" value="0" aria-label="스텝">
+      <span class="pos" id="pPos">—</span>
+      <select id="pSpeed" style="width:auto" aria-label="재생 속도"><option value="1200">느리게</option><option value="600" selected>보통</option><option value="250">빠르게</option></select>
+      <button class="sm" id="pBranch" title="goto_state: 이 스텝까지 복사한 새 trace 에서 이어서 시뮬레이션">이 스텝에서 분기 ↳</button>
+    </div>
+
+    <div class="pane-fsm" id="paneFsm">
+      <details id="projDetails">
+        <summary id="projSummary">FSM 상태를 구분할 변수</summary>
+        <div class="toolbar mt" style="margin-bottom:0">
+          <button class="sm" id="projAllVars">모든 VAR</button>
+          <button class="sm" id="projNone">모두 해제</button>
+          <span class="hint">선택한 변수의 값이 같은 스텝은 하나의 노드로 합쳐집니다 (추상화). 예: 제어 상태 변수 하나만 고르면 상태기계 모양이 됩니다.</span>
+        </div>
+        <div class="projbox" id="projBox"></div>
+      </details>
+      <div class="legend mt">
+        <span><span class="sw" style="background:var(--accent)"></span>현재 스텝</span>
+        <span><span class="sw" style="border:2.4px solid var(--muted)"></span>초기 상태(→)</span>
+        <span>↺ LTL loop 시작</span>
+        <span>간선 라벨: 스텝 번호 · 입력(IVAR)</span>
+        <span>휠: 확대 · 드래그: 이동/노드 이동 · 노드 클릭: 해당 스텝으로</span>
+      </div>
+      <div id="fsmWrap">
+        <div class="fsmtools">
+          <button class="sm" id="fsmFit">맞춤</button>
+          <button class="sm" id="fsmRelayout">재배치</button>
+          <button class="sm" id="fsmSvg">SVG</button>
+        </div>
+        <svg id="fsmSvgEl" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="fsminfo" id="fsmInfo"></div>
+      </div>
+    </div>
+
+    <div class="pane-table" id="paneTable">
+      <div class="toolbar">
+        <input type="text" id="varFilter" placeholder="변수 필터 (정규식)" style="width:180px;flex:0 0 180px">
+        <label class="check" style="margin:0"><input type="checkbox" id="showDefines" checked> DEFINE</label>
+        <label class="check" style="margin:0"><input type="checkbox" id="onlyChanged"> 변한 변수만</label>
+        <span class="grow"></span>
+        <button class="sm" id="btnCsv">CSV</button>
+      </div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--chg)"></span>이전 스텝 대비 변경</span>
+        <span><span class="kind i">IVAR</span>입력</span>
+        <span><span class="kind s">VAR</span>상태</span>
+        <span><span class="kind d">DEF</span>DEFINE</span>
+        <span><span class="sw" style="background:var(--pend)"></span>선택 진행 중 (미확정)</span>
+      </div>
+      <div id="traceBox"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <details id="conDetails">
+      <summary style="font-size:13px;font-weight:650;color:var(--text)">NuSMV 콘솔 <span class="hint">주고받은 원본 입출력</span></summary>
+      <div class="toolbar mt" style="margin-bottom:0"><span class="grow"></span><button class="sm" id="btnClearCon">화면 지우기</button></div>
+      <div id="console"></div>
+    </details>
+  </div>
+</main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVGNS = 'http://www.w3.org/2000/svg';
+let S = null, logPos = 0, busy = false;
+let cursor = 0, lastSig = '', playing = null;
+let viewMode = localGet('view','both');
+let proj = null, projModel = null;          // FSM 투영 변수
+let fsmPos = new Map(), fsmView = null, fsmSig = '';
+
+function localGet(k,d){ try{ return localStorage.getItem('smvtl.'+k) ?? d; }catch(e){ return d; } }
+function localSet(k,v){ try{ localStorage.setItem('smvtl.'+k,v); }catch(e){} }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ================= server ================= */
+async function api(path, body){
+  if(busy) return;
+  busy = true; setDisabled();
+  try{
+    const r = await fetch(path, body===undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j = await r.json();
+    showErr(j.error || '');
+    S = j; render();
+  }catch(e){ showErr('서버 통신 실패: '+e); }
+  finally{ busy = false; setDisabled(); pullLog(); }
+  maybeAuto();
+}
+function showErr(m){ const e=$('err'); e.textContent=m; e.style.display=m?'block':'none'; }
+async function pullLog(){
+  try{
+    const j = await (await fetch('/api/log?from='+logPos)).json();
+    const c = $('console');
+    if(j.len < logPos){ logPos = 0; }
+    for(const it of j.items){ const d=document.createElement('div'); d.className=it.kind; d.textContent=it.text; c.appendChild(d); }
+    logPos = j.len; c.scrollTop = c.scrollHeight;
+  }catch(e){}
+}
+
+/* ================= variables ================= */
+function varKind(n){
+  if(S.input_vars.includes(n)) return 'i';
+  if(S.vars.some(v=>v.name===n)) return 's';
+  return 'd';
+}
+const KLABEL = {i:'IVAR', s:'VAR', d:'DEF'};
+function orderedNames(names){
+  const order={i:0,s:1,d:2}, declared=new Map(S.vars.map((v,i)=>[v.name,i]));
+  return [...names].sort((a,b)=>{
+    const ka=varKind(a), kb=varKind(b);
+    if(ka!==kb) return order[ka]-order[kb];
+    if(declared.has(a)&&declared.has(b)) return declared.get(a)-declared.get(b);
+    return a.localeCompare(b);
+  });
+}
+const val = (c,n)=> (n in c.input) ? c.input[n] : c.state[n];
+
+/* ================= render ================= */
+function render(){
+  if(!S) return;
+  const b=$('modeBadge'); b.className='badge '+S.mode;
+  b.textContent={none:'모델 없음',idle:'대기',choose:'선택 대기',single:'단일 후보',constraint:'제약 입력 대기',busy:'처리 중…',dead:'프로세스 종료'}[S.mode]||S.mode;
+  $('hdrSub').textContent = (S.model?S.model.path:'모델을 로드하세요') + '  ·  ' + S.nusmv;
+  if(S.model){
+    $('loadInfo').innerHTML = S.load_ok
+      ? `<span style="color:var(--ok)">● 로드 성공</span> — 변수 ${S.vars.length}개 (입력 ${S.input_vars.length}) · property ${S.props.length}개`
+      : `<span style="color:var(--err)">● 로드 실패</span><div class="srcbox" style="color:var(--err);white-space:pre-wrap">${esc(S.load_output||'')}</div>`;
+  }
+  $('simTraceNo').textContent = S.sim_trace ? '#'+S.sim_trace : '—';
+  if(!S.model || projModel !== S.model.path){ proj=null; projModel = S.model && S.model.path; fsmPos=new Map(); }
+  renderTraceSel(); renderChoice(); renderVerifier(); renderViewer(); setDisabled();
+}
+
+function setDisabled(){
+  const m=S?S.mode:'none', idle=m==='idle'&&!busy;
+  $('btnPickI').disabled=$('btnPickR').disabled=!idle;
+  $('btnSimI').disabled=$('btnSimR').disabled=!idle||!(S&&S.sim_trace);
+  $('btnRaw').disabled=busy||m==='none'||m==='dead';
+  $('btnLoad').disabled=busy;
+  $('btnRestart').disabled=busy||!(S&&S.model);
+  $('btnCheckAll').disabled=$('btnAdhoc').disabled=!idle;
+  document.querySelectorAll('.btnChk').forEach(x=>x.disabled=!idle);
+  const cols=S?traceColumns():[];
+  $('pBranch').disabled=!idle||!cols.length||!cols[cursor]||cols[cursor].pend;
+}
+
+/* ---------- choice ---------- */
+function currentState(){
+  if(S.pending&&S.pending.length) return S.pending[S.pending.length-1].state;
+  if(S.trace&&S.trace.number===S.sim_trace&&S.trace.steps.length) return S.trace.steps[S.trace.steps.length-1].state;
+  return null;
+}
+function renderChoice(){
+  const p=$('choicePanel'), body=$('choiceBody');
+  if(!['choose','single','constraint'].includes(S.mode)){ p.classList.remove('on'); body.innerHTML=''; return; }
+  p.classList.add('on');
+  const run=S.run, prog=run?` <span class="hint">${run.kind==='init'?'초기 상태':'스텝 '+(run.done+1)+' / '+run.total}</span>`:'';
+  if(S.mode==='constraint'){
+    $('choiceTitle').innerHTML='후보 상태가 너무 많습니다'+prog;
+    body.innerHTML=`<div class="muted" style="margin-bottom:8px">NuSMV: “Too many (${esc(S.prompt.count)}) states to visualize.” — 후보를 줄일 제약식을 입력하세요 (최대 100개 표시).</div>
+      <div class="row"><input type="text" id="consIn" placeholder="예: x = 1 & y < 3"><button class="primary fix" id="consBtn">전달</button></div>`;
+    $('consBtn').onclick=()=>api('/api/choose',{constraint:$('consIn').value});
+    $('consIn').onkeydown=e=>{ if(e.key==='Enter') $('consBtn').click(); };
+    $('consIn').focus(); return;
+  }
+  const cands=S.candidates, cur=currentState();
+  $('choiceTitle').innerHTML=(S.mode==='single'?'후보가 하나뿐입니다':`다음 상태 선택 — 후보 ${cands.length}개`)+prog;
+  const all=new Set(); cands.forEach(c=>{Object.keys(c.input).forEach(k=>all.add(k));Object.keys(c.state).forEach(k=>all.add(k));});
+  const showAll=window._candAll||false;
+  let names=orderedNames(all).filter(n=>{
+    if(showAll||varKind(n)==='i') return true;
+    const vals=new Set(cands.map(c=>val(c,n)));
+    if(vals.size>1) return true;
+    return cur&&cur[n]!==undefined&&[...vals][0]!==cur[n];
+  });
+  if(!names.length) names=orderedNames(all);
+  let h=`<div class="toolbar">
+      <button class="primary sm" id="cRand">${S.mode==='single'?'진행 (Enter)':'랜덤 선택'}</button>
+      ${run&&run.kind==='simulate'&&run.total-run.done>1?'<button class="sm" id="cRandAll">남은 스텝 모두 랜덤</button>':''}
+      <span class="grow"></span>
+      <label class="check" style="margin:0"><input type="checkbox" id="cAll" ${showAll?'checked':''}> 모든 변수</label>
+      <span class="hint">기본: 후보 간 차이·현재 대비 변화가 있는 변수만 · 행 클릭 = 선택${cands.length<=10?' · 숫자키':''}</span></div>`;
+  h+=`<div class="tablewrap" style="max-height:45vh"><table class="cand"><thead><tr><th class="vname">#</th>${names.map(n=>`<th><span class="kind ${varKind(n)}">${KLABEL[varKind(n)]}</span>${esc(n)}</th>`).join('')}</tr></thead><tbody>`;
+  for(const c of cands){
+    h+=`<tr data-i="${c.index}"><td class="vname idx">${c.index}</td>`;
+    for(const n of names){
+      const v=val(c,n), changed=varKind(n)!=='i'&&cur&&cur[n]!==undefined&&v!==undefined&&v!==cur[n];
+      h+=`<td class="${changed?'chg':''}">${v===undefined?'<span class="muted">·</span>':esc(v)}</td>`;
+    }
+    h+='</tr>';
+  }
+  body.innerHTML=h+'</tbody></table></div>';
+  body.querySelectorAll('tbody tr').forEach(tr=>tr.onclick=()=>api('/api/choose',{index:+tr.dataset.i}));
+  $('cAll').onchange=e=>{window._candAll=e.target.checked; renderChoice();};
+  $('cRand').onclick=randomChoose;
+  if($('cRandAll')) $('cRandAll').onclick=()=>{ window._autoRandom=true; randomChoose(); };
+}
+function randomChoose(){
+  if(S.mode==='single') return api('/api/choose',{});
+  if(S.mode!=='choose') return;
+  api('/api/choose',{index:S.candidates[Math.floor(Math.random()*S.candidates.length)].index});
+}
+function maybeAuto(){
+  if(!S) return;
+  if(!['choose','single'].includes(S.mode)){ window._autoRandom=false; return; }
+  if(S.mode==='single'&&$('autoSingle').checked) return setTimeout(()=>api('/api/choose',{}),20);
+  if(window._autoRandom) setTimeout(randomChoose,20);
+}
+
+/* ---------- verifier ---------- */
+function renderVerifier(){
+  const box=$('propsBox');
+  if(!S.model||!S.load_ok){ box.innerHTML='<div class="empty">모델을 로드하면 SPEC 목록이 표시됩니다.</div>'; $('verResult').innerHTML=''; return; }
+  if(!S.props.length) box.innerHTML='<div class="empty">모델에 CTLSPEC / LTLSPEC / INVARSPEC 이 없습니다. 위 입력창에서 식을 직접 검사할 수 있습니다.</div>';
+  else{
+    let h='<div class="tablewrap" style="max-height:40vh"><table class="props"><thead><tr><th>#</th><th>이름</th><th>종류</th><th>식</th><th>결과</th><th></th></tr></thead><tbody>';
+    for(const p of S.props){
+      const sel=S.trace&&p.cex===S.trace.number;
+      h+=`<tr class="${sel?'sel':''}"><td>${p.index}</td><td>${esc(p.name||'—')}</td><td>${esc(p.type)}</td><td class="formula">${esc(p.formula)}</td>
+        <td><span class="badge ${esc(p.status)}">${esc({True:'True ✓',False:'False ✗',Unchecked:'미검사'}[p.status]||p.status)}</span></td>
+        <td style="white-space:nowrap"><button class="sm btnChk" data-i="${p.index}">검사</button>
+        ${p.cex?` <button class="sm primary" data-cex="${p.cex}" title="반례 trace #${p.cex} 를 FSM/표에서 단계별 재생">반례 재생 ▶</button>`:''}</td></tr>`;
+    }
+    box.innerHTML=h+'</tbody></table></div>';
+    box.querySelectorAll('.btnChk').forEach(b=>b.onclick=()=>api('/api/check',{index:+b.dataset.i}));
+    box.querySelectorAll('[data-cex]').forEach(b=>b.onclick=()=>playTrace(+b.dataset.cex));
+  }
+  const lc=S.last_check, vr=$('verResult');
+  if(!lc){ vr.innerHTML=''; return; }
+  let h=`<div class="vresult"><span class="muted mono" style="font-size:12px">${esc(lc.cmd)}</span>`;
+  for(const r of lc.results) h+=`<div><span class="${r.result==='true'?'t':'f'}">${r.result==='true'?'TRUE':'FALSE'}</span> <span class="mono">${esc(r.formula)}</span></div>`;
+  if(lc.new_traces.length) h+=`<div class="mt">반례 trace: ${lc.new_traces.map(n=>`<button class="sm" data-cex="${n}">#${n} 재생 ▶</button>`).join(' ')} <span class="hint">FSM/표에서 단계별로 보고, 원하는 스텝에서 분기해 직접 시뮬레이션할 수 있습니다.</span></div>`;
+  if(lc.error) h+=`<pre>${esc(lc.error)}</pre>`;
+  vr.innerHTML=h+'</div>';
+  vr.querySelectorAll('[data-cex]').forEach(b=>b.onclick=()=>playTrace(+b.dataset.cex));
+}
+async function playTrace(n){
+  stopPlay();
+  if(!S.trace||S.trace.number!==n) await api('/api/view',{number:n});
+  cursor=0; renderViewer(); startPlay();
+  $('paneFsm').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+/* ---------- trace selector ---------- */
+function renderTraceSel(){
+  const sel=$('traceSel');
+  if(!S.traces.length){ sel.innerHTML='<option>trace 없음</option>'; sel.disabled=true; return; }
+  sel.disabled=false;
+  sel.innerHTML=S.traces.map(t=>`<option value="${t.number}" ${S.trace&&S.trace.number===t.number?'selected':''}>#${t.number} ${esc(t.description)} (${t.length})${t.number===S.sim_trace?' ★시뮬레이션':''}</option>`).join('');
+}
+
+/* ================= viewer ================= */
+function traceColumns(){
+  const cols=[];
+  if(S.trace) S.trace.steps.forEach(st=>cols.push({label:st.label,input:st.input,state:st.state,pend:false,loop:S.trace.loops.includes(st.label)}));
+  if(S.pending&&S.pending.length&&(!S.trace||S.trace.number===S.sim_trace||(S.run&&S.run.kind==='init'))){
+    const init=S.run&&S.run.kind==='init';
+    if(init) cols.length=0;
+    let n=init?0:cols.length;
+    for(const c of S.pending){ n++; cols.push({label:(init?'new':S.trace?S.trace.number:'?')+'.'+n+'*',input:c.input,state:c.state,pend:true}); }
+  }
+  return cols;
+}
+function renderViewer(){
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===viewMode));
+  $('paneFsm').style.display=viewMode==='table'?'none':'';
+  $('paneTable').style.display=viewMode==='fsm'?'none':'';
+  const cols=traceColumns();
+  const sig=(S.trace?S.trace.number:'-')+':'+cols.length;
+  if(sig!==lastSig){
+    const sameTrace=lastSig.split(':')[0]===sig.split(':')[0];
+    if(!playing && (!sameTrace || cursor>=Number(lastSig.split(':')[1]||0)-1)) cursor=Math.max(0,cols.length-1);
+    lastSig=sig;
+  }
+  cursor=Math.min(cursor,Math.max(0,cols.length-1));
+  const r=$('pRange'); r.max=Math.max(0,cols.length-1); r.value=cursor;
+  $('pPos').textContent=cols.length?`${cols[cursor].label}  (${cursor+1}/${cols.length})`:'—';
+  if(viewMode!=='table') renderFsm(cols);
+  if(viewMode!=='fsm') renderTable(cols);
+  setDisabled();
+}
+
+/* ---------- table ---------- */
+function renderTable(cols){
+  const box=$('traceBox');
+  if(!cols.length){ box.innerHTML='<div class="empty">'+(S.model?'초기 상태를 선택하거나(pick_state) property 를 검사하세요.':'모델을 로드하세요.')+'</div>'; return; }
+  const names=new Set(); cols.forEach(c=>{Object.keys(c.input).forEach(k=>names.add(k));Object.keys(c.state).forEach(k=>names.add(k));});
+  let rx=null; try{ const f=$('varFilter').value.trim(); if(f) rx=new RegExp(f,'i'); }catch(e){}
+  const showDef=$('showDefines').checked, onlyChg=$('onlyChanged').checked;
+  let list=orderedNames(names).filter(n=>(showDef||varKind(n)!=='d')&&(!rx||rx.test(n)));
+  if(onlyChg) list=list.filter(n=>new Set(cols.map(c=>val(c,n)).filter(v=>v!==undefined)).size>1);
+  let h='<div class="tablewrap" id="tw"><table><thead><tr><th class="vname">변수 \\ 스텝</th>';
+  cols.forEach((c,i)=>{ h+=`<th class="step ${c.pend?'pend':''} ${i===cursor?'cursor':''}" data-c="${i}" title="클릭: 이 스텝으로 이동">${esc(c.label)}${c.loop?' ↺':''}</th>`; });
+  h+='</tr></thead><tbody>';
+  let lastKind=null;
+  for(const n of list){
+    const k=varKind(n);
+    if(k!==lastKind){ h+=`<tr class="grp"><td class="vname">${{i:'입력 (IVAR)',s:'상태 (VAR)',d:'DEFINE'}[k]}</td><td colspan="${cols.length}"></td></tr>`; lastKind=k; }
+    h+=`<tr><td class="vname"><span class="kind ${k}">${KLABEL[k]}</span>${esc(n)}</td>`;
+    let prev;
+    cols.forEach((c,i)=>{
+      const v=val(c,n), chg=i>0&&v!==undefined&&prev!==undefined&&v!==prev;
+      h+=`<td class="${chg?'chg':''} ${c.pend?'pend':''} ${i===cursor?'cursor':''} ${i>cursor?'future':''}">${v===undefined?'<span class="muted">—</span>':esc(v)}</td>`;
+      if(v!==undefined) prev=v;
+    });
+    h+='</tr>';
+  }
+  const old=$('tw'), sl=old?old.scrollLeft:null, st=old?old.scrollTop:0;
+  box.innerHTML=h+'</tbody></table></div>';
+  const tw=$('tw'); tw.scrollTop=st;
+  const th=tw.querySelector('th.cursor');
+  if(th){ const left=th.offsetLeft-tw.clientWidth/2; tw.scrollLeft=(sl===null||th.offsetLeft<sl+150||th.offsetLeft>sl+tw.clientWidth-60)?left:sl; }
+  tw.querySelectorAll('th[data-c]').forEach(th=>th.onclick=()=>{ stopPlay(); setCursor(+th.dataset.c); });
+}
+
+/* ---------- playback ---------- */
+function setCursor(i){
+  const n=traceColumns().length; if(!n) return;
+  cursor=Math.max(0,Math.min(n-1,i)); renderViewer();
+}
+function startPlay(){
+  const n=traceColumns().length; if(n<2) return;
+  if(cursor>=n-1) cursor=0;
+  $('pPlay').textContent='⏸ 정지';
+  const tick=()=>{
+    const n=traceColumns().length;
+    if(cursor>=n-1){ stopPlay(); return; }
+    setCursor(cursor+1); playing=setTimeout(tick,+$('pSpeed').value);
+  };
+  renderViewer(); playing=setTimeout(tick,+$('pSpeed').value);
+}
+function stopPlay(){ if(playing) clearTimeout(playing); playing=null; $('pPlay').textContent='▶ 재생'; }
+
+/* ================= FSM ================= */
+function defaultProj(){ return S.vars.filter(v=>!S.input_vars.includes(v.name)).map(v=>v.name); }
+function effectiveProj(cols){
+  const avail=new Set(); cols.forEach(c=>Object.keys(c.state).forEach(k=>avail.add(k)));
+  if(proj) return proj.filter(n=>avail.has(n));
+  const p=defaultProj().filter(n=>avail.has(n));
+  return p.length?p:[...avail].filter(n=>varKind(n)==='s');
+}
+function renderProjBox(cols){
+  const avail=new Set(); cols.forEach(c=>Object.keys(c.state).forEach(k=>avail.add(k)));
+  const names=orderedNames(avail), ep=new Set(effectiveProj(cols));
+  $('projSummary').textContent=`FSM 상태를 구분할 변수 (${ep.size}/${names.length}) — ${proj?'사용자 선택':'기본: 모든 VAR'}`;
+  const sig=names.join(',')+'|'+[...ep].join(',');
+  if($('projBox').dataset.sig===sig) return;
+  $('projBox').dataset.sig=sig;
+  $('projBox').innerHTML=names.map(n=>`<label><input type="checkbox" value="${esc(n)}" ${ep.has(n)?'checked':''}><span class="kind ${varKind(n)}">${KLABEL[varKind(n)]}</span>${esc(n)}</label>`).join('');
+  $('projBox').querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
+    proj=[...$('projBox').querySelectorAll('input:checked')].map(x=>x.value); fsmPos=new Map(); fsmView=null; renderViewer();
+  });
+}
+
+function buildGraph(cols){
+  const P=effectiveProj(cols), nodes=new Map(), edges=new Map(), order=[];
+  const keyOf=c=>P.map(n=>c.state[n]).join('\u0001');
+  const inputVars=S.input_vars;
+  let prev=null;
+  cols.forEach((c,i)=>{
+    const k=keyOf(c);
+    if(!nodes.has(k)){ const nd={key:k,vals:Object.fromEntries(P.map(n=>[n,c.state[n]])),first:i,visits:[],pend:c.pend,loop:false}; nodes.set(k,nd); order.push(nd); }
+    const nd=nodes.get(k); nd.visits.push(i); if(!c.pend) nd.pend=false; if(c.loop) nd.loop=true;
+    if(prev!==null){
+      const inp=inputVars.filter(v=>v in c.input).map(v=>`${v}=${c.input[v]}`).join(' ');
+      const ek=prev+'\u0002'+k;
+      if(!edges.has(ek)) edges.set(ek,{from:prev,to:k,inputs:new Set(),steps:[],pend:true});
+      const e=edges.get(ek); e.steps.push(i); if(inp) e.inputs.add(inp); if(!c.pend) e.pend=false;
+    }
+    prev=k;
+  });
+  // 노드 라벨: 노드들 사이에서 값이 달라지는 투영 변수만 (고정 값은 하단 정보줄에)
+  const varying=P.filter(n=>new Set(order.map(nd=>nd.vals[n])).size>1);
+  const fixed=P.filter(n=>!varying.includes(n));
+  return {P,nodes,order,edges:[...edges.values()],varying,fixed};
+}
+
+function nodeLabel(nd,varying){
+  if(!varying.length) return ['(state)'];
+  if(varying.length===1) return [String(nd.vals[varying[0]])];
+  const lines=varying.slice(0,6).map(n=>`${n}=${nd.vals[n]}`);
+  if(varying.length>6) lines.push(`… +${varying.length-6}`);
+  return lines;
+}
+
+function layoutGraph(G){
+  // 층: 초기 노드에서의 BFS 거리, 층 내 순서: 첫 방문 순서. 층이 많으면 뱀 모양으로 접는다.
+  const adj=new Map(G.order.map(n=>[n.key,[]]));
+  G.edges.forEach(e=>adj.get(e.from).push(e.to));
+  const layer=new Map(); const q=[G.order[0].key]; layer.set(q[0],0);
+  while(q.length){ const k=q.shift(); for(const t of adj.get(k)) if(!layer.has(t)){ layer.set(t,layer.get(k)+1); q.push(t); } }
+  G.order.forEach(n=>{ if(!layer.has(n.key)) layer.set(n.key,0); });
+  const byL=new Map(); G.order.forEach(n=>{ const l=layer.get(n.key); if(!byL.has(l)) byL.set(l,[]); byL.get(l).push(n); });
+  const nL=Math.max(...byL.keys())+1;
+  const perRow=nL>10?Math.max(6,Math.ceil(Math.sqrt(nL*2.2))):nL;
+  const lblW=Math.max(0,...G.edges.filter(e=>e.from!==e.to).map(e=>Math.max(...e.lbl.map(t=>t.length))*6.7));
+  const colW=Math.max(...G.order.map(n=>n.w))+Math.min(320,Math.max(90,lblW+36));
+  const maxInLayer=Math.max(...[...byL.values()].map(a=>a.length));
+  const rowH=Math.max(...G.order.map(n=>n.h))+46;
+  const bandH=maxInLayer*rowH+90;
+  for(const [l,arr] of byL){
+    const band=Math.floor(l/perRow), pos=l%perRow, x=(band%2===0?pos:perRow-1-pos)*colW;
+    arr.forEach((n,i)=>{ n.x=x; n.y=band*bandH+(i-(arr.length-1)/2)*rowH+(maxInLayer-1)*rowH/2; });
+  }
+}
+
+function rectExit(n,tx,ty){
+  const dx=tx-n.x, dy=ty-n.y; if(!dx&&!dy) return [n.x,n.y];
+  const sx=(n.w/2+2)/Math.abs(dx||1e-9), sy=(n.h/2+2)/Math.abs(dy||1e-9), s=Math.min(sx,sy);
+  return [n.x+dx*s,n.y+dy*s];
+}
+function fmtSteps(st,cols){
+  const labels=st.map(i=>'#'+cols[i].label.split('.')[1]);
+  return labels.length>3?labels.slice(0,2).join(',')+` …×${labels.length}`:labels.join(',');
+}
+
+function renderFsm(cols){
+  const svg=$('fsmSvgEl');
+  renderProjBox(cols);
+  if(!cols.length){ svg.innerHTML=''; $('fsmInfo').textContent='trace 가 없습니다.'; return; }
+  const G=buildGraph(cols);
+  if(!G.P.length){ svg.innerHTML=''; $('fsmInfo').textContent='FSM 상태를 구분할 변수를 하나 이상 선택하세요.'; return; }
+  if(G.order.length>600){ svg.innerHTML=''; $('fsmInfo').textContent=`노드가 ${G.order.length}개로 너무 많습니다. 위에서 FSM 변수 수를 줄여 추상화하세요.`; return; }
+  // 노드 크기
+  G.edges.forEach(e=>{ const ins=[...e.inputs];
+    e.lbl=[fmtSteps(e.steps,cols)].concat(ins.length?[ins.slice(0,2).join(' | ')+(ins.length>2?` | …(+${ins.length-2})`:'')]:[]); });
+  G.order.forEach(n=>{ n.lines=nodeLabel(n,G.varying); n.w=Math.max(54,Math.max(...n.lines.map(s=>s.length))*7.4+22); n.h=n.lines.length*15+14; });
+  const sig=(S.trace?S.trace.number:'')+'|'+G.P.join(',')+'|'+G.order.map(n=>n.key).join('\u0003');
+  if(sig!==fsmSig||G.order.some(n=>!fsmPos.has(n.key))){ layoutGraph(G); G.order.forEach(n=>{ if(!fsmPos.has(n.key)) fsmPos.set(n.key,{x:n.x,y:n.y}); }); }
+  G.order.forEach(n=>{ const p=fsmPos.get(n.key); n.x=p.x; n.y=p.y; });
+  const relayoutNeeded=sig!==fsmSig && fsmSig.split('|')[0]!==sig.split('|')[0];
+  fsmSig=sig;
+
+  const curKey=G.order.find(n=>n.visits.includes(cursor))?.key;
+  const pair=new Set(G.edges.map(e=>e.from+'\u0002'+e.to));
+  const multi=new Map(); // 같은 방향 평행 간선 오프셋
+  let h=`<defs>${['','trav','now'].map(c=>`<marker id="ar${c}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow ${c}" d="M0,0L10,5L0,10z"/></marker>`).join('')}</defs><g id="vp">`;
+  const nodeBy=new Map(G.order.map(n=>[n.key,n]));
+  for(const e of G.edges){
+    const a=nodeBy.get(e.from), b=nodeBy.get(e.to);
+    const trav=e.steps.some(s=>s<=cursor), now=e.steps.includes(cursor);
+    const cls=`fe ${now?'now':trav?'trav':'future'} ${e.pend?'pend':''}`;
+    const mk=now?'arnow':trav?'artrav':'ar';
+    const lbl=e.lbl;
+    let d, lx, ly;
+    if(e.from===e.to){
+      const k=(multi.get(e.from+'self')||0); multi.set(e.from+'self',k+1);
+      const r=18+k*10, x0=a.x-10, x1=a.x+10, y=a.y-a.h/2;
+      d=`M${x0},${y} C${x0-r*1.6},${y-r*2.4} ${x1+r*1.6},${y-r*2.4} ${x1},${y}`; lx=a.x; ly=y-r*1.9-4;
+    }else{
+      const pk=e.from+'\u0002'+e.to, k=(multi.get(pk)||0); multi.set(pk,k+1);
+      const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
+      const back=dx<-1||(Math.abs(dx)<1&&dy<0);
+      let off=(pair.has(e.to+'\u0002'+e.from)?22:0)+k*18+(back?Math.min(120,30+len*0.15):0);
+      const mx=(a.x+b.x)/2-dy/len*off, my=(a.y+b.y)/2+dx/len*off;
+      const [sx,sy]=rectExit(a,mx,my), [tx,ty]=rectExit(b,mx,my);
+      d=`M${sx},${sy} Q${mx},${my} ${tx},${ty}`;
+      lx=0.25*sx+0.5*mx+0.25*tx; ly=0.25*sy+0.5*my+0.25*ty-4;
+    }
+    h+=`<g class="${cls}"><path d="${d}" marker-end="url(#${mk})"/>${lbl.map((t,i)=>`<text x="${lx}" y="${ly+i*13-(lbl.length-1)*13}" text-anchor="middle">${esc(t)}</text>`).join('')}</g>`;
+  }
+  // 초기 화살표
+  const n0=G.order[0];
+  h+=`<path class="initarrow" d="M${n0.x-n0.w/2-34},${n0.y} L${n0.x-n0.w/2-4},${n0.y}" marker-end="url(#artrav)"/>`;
+  for(const n of G.order){
+    const visited=n.visits.some(v=>v<=cursor);
+    const cls=`fn ${n.key===curKey?'cur':visited?'visited':'future'} ${n===n0?'init':''} ${n.pend?'pend':''}`;
+    const title=Object.entries(n.vals).map(([k,v])=>`${k} = ${v}`).join('\n')+`\n\n방문 스텝: ${n.visits.map(i=>cols[i].label).join(', ')}`;
+    h+=`<g class="${cls}" data-k="${esc(n.key)}" transform="translate(${n.x},${n.y})"><title>${esc(title)}</title><rect x="${-n.w/2}" y="${-n.h/2}" width="${n.w}" height="${n.h}" rx="8"/>`;
+    n.lines.forEach((t,i)=>{ h+=`<text text-anchor="middle" x="0" y="${-n.h/2+19+i*15}">${esc(t)}</text>`; });
+    if(n.loop) h+=`<text class="badge-loop" x="${n.w/2-4}" y="${-n.h/2-4}" text-anchor="end">↺ loop</text>`;
+    h+='</g>';
+  }
+  svg.innerHTML=h+'</g>';
+  const fixedTxt=G.fixed.length?` · 고정: ${G.fixed.slice(0,4).map(n=>n+'='+G.order[0].vals[n]).join(', ')}${G.fixed.length>4?' …':''}`:'';
+  $('fsmInfo').textContent=`노드 ${G.order.length} · 간선 ${G.edges.length} · 스텝 ${cols.length}${fixedTxt}`;
+  if(!fsmView||relayoutNeeded) fitFsm(); else applyView();
+  // 현재 노드가 화면 밖이면 전체 맞춤 (시뮬레이션으로 노드가 늘어날 때 따라가기)
+  const cn=curKey&&nodeBy.get(curKey), wrap=$('fsmWrap');
+  if(cn&&fsmView){ const x=cn.x*fsmView.s+fsmView.tx, y=cn.y*fsmView.s+fsmView.ty;
+    if(x<20||y<20||x>wrap.clientWidth-20||y>wrap.clientHeight-20) fitFsm(); }
+  bindFsm(G,cols);
+}
+
+function bbox(){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  document.querySelectorAll('#vp .fn').forEach(g=>{ const k=g.dataset.k, p=fsmPos.get(k), r=g.querySelector('rect'); const w=+r.getAttribute('width'), hh=+r.getAttribute('height');
+    x0=Math.min(x0,p.x-w/2-40); x1=Math.max(x1,p.x+w/2+20); y0=Math.min(y0,p.y-hh/2-60); y1=Math.max(y1,p.y+hh/2+40); });
+  return {x0,y0,x1,y1};
+}
+function fitFsm(){
+  const wrap=$('fsmWrap'), W=wrap.clientWidth||800, H=wrap.clientHeight||460, b=bbox();
+  if(!isFinite(b.x0)) return;
+  const s=Math.min(1.4,Math.min(W/(b.x1-b.x0),H/(b.y1-b.y0)));
+  fsmView={s,tx:(W-(b.x1-b.x0)*s)/2-b.x0*s,ty:(H-(b.y1-b.y0)*s)/2-b.y0*s};
+  applyView();
+}
+function applyView(){ const vp=$('vp'); if(vp&&fsmView) vp.setAttribute('transform',`translate(${fsmView.tx},${fsmView.ty}) scale(${fsmView.s})`); }
+
+function bindFsm(G,cols){
+  const svg=$('fsmSvgEl');
+  svg.querySelectorAll('.fn').forEach(g=>{
+    g.addEventListener('pointerdown',ev=>{
+      ev.stopPropagation(); stopPlay();
+      const k=g.dataset.k, p=fsmPos.get(k), sx=ev.clientX, sy=ev.clientY, ox=p.x, oy=p.y; let moved=false;
+      g.setPointerCapture(ev.pointerId);
+      const mv=e=>{ const dx=(e.clientX-sx)/fsmView.s, dy=(e.clientY-sy)/fsmView.s; if(Math.abs(dx)+Math.abs(dy)>3) moved=true; fsmPos.set(k,{x:ox+dx,y:oy+dy}); if(moved) g.setAttribute('transform',`translate(${ox+dx},${oy+dy})`); };
+      const up=()=>{ g.removeEventListener('pointermove',mv); g.removeEventListener('pointerup',up);
+        if(moved) renderFsm(cols);
+        else{ const nd=G.order.find(n=>n.key===k); const nx=nd.visits.find(v=>v>cursor); setCursor(nx!==undefined?nx:nd.visits[0]); } };
+      g.addEventListener('pointermove',mv); g.addEventListener('pointerup',up);
+    });
+  });
+}
+(function(){
+  const svg=$('fsmSvgEl');
+  svg.addEventListener('pointerdown',ev=>{
+    if(!fsmView) return; const sx=ev.clientX, sy=ev.clientY, o={...fsmView};
+    svg.classList.add('panning'); svg.setPointerCapture(ev.pointerId);
+    const mv=e=>{ fsmView.tx=o.tx+e.clientX-sx; fsmView.ty=o.ty+e.clientY-sy; applyView(); };
+    const up=()=>{ svg.classList.remove('panning'); svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up); };
+    svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up);
+  });
+  svg.addEventListener('wheel',ev=>{
+    if(!fsmView) return; ev.preventDefault();
+    const r=svg.getBoundingClientRect(), mx=ev.clientX-r.left, my=ev.clientY-r.top;
+    const f=Math.exp(-ev.deltaY*0.0015), s=Math.max(0.1,Math.min(4,fsmView.s*f)), k=s/fsmView.s;
+    fsmView={s,tx:mx-(mx-fsmView.tx)*k,ty:my-(my-fsmView.ty)*k}; applyView();
+  },{passive:false});
+})();
+
+function exportSvg(){
+  const svg=$('fsmSvgEl'); if(!svg.firstChild) return;
+  const b=bbox(), clone=svg.cloneNode(true);
+  clone.querySelector('#vp').removeAttribute('transform');
+  clone.setAttribute('viewBox',`${b.x0} ${b.y0} ${b.x1-b.x0} ${b.y1-b.y0}`);
+  clone.setAttribute('width',b.x1-b.x0); clone.setAttribute('height',b.y1-b.y0);
+  const cs=getComputedStyle(document.documentElement);
+  const css=$('fsmCss').textContent.replace(/var\((--[\w-]+)\)/g,(_,v)=>cs.getPropertyValue(v).trim());
+  const st=document.createElementNS(SVGNS,'style'); st.textContent=css; clone.insertBefore(st,clone.firstChild);
+  const bg=document.createElementNS(SVGNS,'rect'); Object.entries({x:b.x0,y:b.y0,width:b.x1-b.x0,height:b.y1-b.y0,fill:cs.getPropertyValue('--bg').trim()}).forEach(([k,v])=>bg.setAttribute(k,v));
+  clone.insertBefore(bg,clone.querySelector('#vp'));
+  download(new XMLSerializer().serializeToString(clone),'image/svg+xml',`${S.model?S.model.name:'model'}.trace${S.trace?S.trace.number:''}.fsm.svg`);
+}
+function download(text,type,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); }
+function exportCsv(){
+  const cols=traceColumns(); if(!cols.length) return;
+  const names=new Set(); cols.forEach(c=>{Object.keys(c.input).forEach(k=>names.add(k));Object.keys(c.state).forEach(k=>names.add(k));});
+  const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
+  const out=['variable,kind,'+cols.map(c=>q(c.label)).join(',')];
+  for(const n of orderedNames(names)) out.push(q(n)+','+KLABEL[varKind(n)]+','+cols.map(c=>q(val(c,n))).join(','));
+  download(out.join('\n'),'text/csv',`${S.model?S.model.name:'trace'}.trace${S.trace?S.trace.number:''}.csv`);
+}
+
+/* ================= events ================= */
+async function loadModels(){
+  try{
+    const j=await (await fetch('/api/models')).json();
+    $('modelSelect').innerHTML=`<option value="">— ${esc(j.root)} 의 .smv (${j.models.length}) —</option>`+j.models.map(m=>`<option>${esc(m)}</option>`).join('');
+  }catch(e){}
+}
+async function loadSource(){ try{ $('srcBox').textContent=(await (await fetch('/api/source')).json()).source; }catch(e){} }
+$('modelSelect').onchange=e=>{ if(e.target.value){ $('modelPath').value=e.target.value; $('btnLoad').click(); } };
+$('btnLoad').onclick=async()=>{ const p=$('modelPath').value.trim(); if(!p) return showErr('모델 경로를 입력하거나 선택하세요.'); stopPlay(); await api('/api/load',{path:p}); loadSource(); };
+$('modelPath').onkeydown=e=>{ if(e.key==='Enter') $('btnLoad').click(); };
+$('fileUp').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; stopPlay(); await api('/api/load',{source:await f.text(),name:f.name}); loadSource(); e.target.value=''; };
+$('btnRestart').onclick=async()=>{ stopPlay(); await api('/api/restart',{}); loadSource(); };
+$('btnPickI').onclick=()=>{ stopPlay(); api('/api/pick_init',{constraint:$('initC').value}); };
+$('btnPickR').onclick=()=>{ stopPlay(); api('/api/pick_init',{constraint:$('initC').value,random:true}); };
+const simBody=random=>({steps:+$('simK').value||1,c:$('simC').value,t:$('simT').value,random});
+$('btnSimI').onclick=()=>{ stopPlay(); window._autoRandom=false; api('/api/simulate',simBody(false)); };
+$('btnSimR').onclick=()=>{ stopPlay(); api('/api/simulate',simBody(true)); };
+$('simK').onkeydown=e=>{ if(e.key==='Enter'&&!$('btnSimI').disabled) $('btnSimI').click(); };
+$('btnRaw').onclick=()=>{ const c=$('rawCmd').value; api('/api/command',{cmd:c}); $('rawCmd').value=''; $('conDetails').open=true; };
+$('rawCmd').onkeydown=e=>{ if(e.key==='Enter') $('btnRaw').click(); };
+$('btnCheckAll').onclick=()=>api('/api/check',{});
+$('btnAdhoc').onclick=()=>api('/api/check_formula',{kind:$('adhocKind').value,formula:$('adhocF').value});
+$('adhocF').onkeydown=e=>{ if(e.key==='Enter') $('btnAdhoc').click(); };
+$('btnVerToggle').onclick=()=>{ const b=$('verBody'), hide=b.style.display!=='none'; b.style.display=hide?'none':''; $('btnVerToggle').textContent=hide?'펼치기':'접기'; };
+$('traceSel').onchange=e=>{ stopPlay(); api('/api/view',{number:+e.target.value}); };
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{ viewMode=b.dataset.v; localSet('view',viewMode); renderViewer(); if(viewMode!=='table') fitFsm(); });
+$('pFirst').onclick=()=>{ stopPlay(); setCursor(0); };
+$('pPrev').onclick=()=>{ stopPlay(); setCursor(cursor-1); };
+$('pNext').onclick=()=>{ stopPlay(); setCursor(cursor+1); };
+$('pLast').onclick=()=>{ stopPlay(); setCursor(1e9); };
+$('pPlay').onclick=()=>playing?stopPlay():startPlay();
+$('pRange').oninput=e=>{ stopPlay(); setCursor(+e.target.value); };
+$('pBranch').onclick=()=>{
+  const c=traceColumns()[cursor]; if(!c||c.pend) return;
+  stopPlay(); api('/api/goto',{label:c.label});
+};
+$('fsmFit').onclick=fitFsm;
+$('fsmRelayout').onclick=()=>{ fsmPos=new Map(); fsmSig=''; renderViewer(); fitFsm(); };
+$('fsmSvg').onclick=exportSvg;
+$('projAllVars').onclick=()=>{ proj=defaultProj(); fsmPos=new Map(); fsmView=null; $('projBox').dataset.sig=''; renderViewer(); };
+$('projNone').onclick=()=>{ proj=[]; fsmPos=new Map(); fsmView=null; $('projBox').dataset.sig=''; renderViewer(); };
+['varFilter','showDefines','onlyChanged'].forEach(id=>$(id).addEventListener('input',()=>S&&renderTable(traceColumns())));
+$('btnCsv').onclick=exportCsv;
+$('btnClearCon').onclick=()=>{ $('console').innerHTML=''; };
+document.addEventListener('keydown',e=>{
+  if(!S||['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(S.mode==='single'&&e.key==='Enter'){ api('/api/choose',{}); return; }
+  if(S.mode==='choose'&&/^[0-9]$/.test(e.key)&&S.candidates.length<=10){ const c=S.candidates.find(c=>c.index===+e.key); if(c) api('/api/choose',{index:c.index}); return; }
+  if(e.key==='ArrowRight'){ stopPlay(); setCursor(cursor+1); e.preventDefault(); }
+  if(e.key==='ArrowLeft'){ stopPlay(); setCursor(cursor-1); e.preventDefault(); }
+  if(e.key===' '){ playing?stopPlay():startPlay(); e.preventDefault(); }
+});
+window.addEventListener('resize',()=>{ if(viewMode!=='table') fitFsm(); });
+
+(async()=>{
+  await loadModels();
+  await api('/api/state');
+  if(S&&S.model){ $('modelPath').value=S.model.uploaded?'':S.model.path; loadSource(); }
+  setInterval(()=>{ if(S&&S.mode==='busy'&&!busy) api('/api/state'); },1000);
+})();
+</script>
+</body>
+</html>

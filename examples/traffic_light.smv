@@ -1,0 +1,34 @@
+-- Pedestrian traffic light: a request button and a timer.
+MODULE main
+IVAR
+  request : boolean;
+VAR
+  light   : {red, green, yellow};
+  waiting : boolean;
+  timer   : 0..3;
+ASSIGN
+  init(light)   := red;
+  init(waiting) := FALSE;
+  init(timer)   := 0;
+  next(waiting) := case
+      light = red & timer = 3 : FALSE;
+      request                 : TRUE;
+      TRUE                    : waiting;
+    esac;
+  next(light) := case
+      light = green & waiting & timer >= 2 : yellow;
+      light = yellow                       : red;
+      light = red & timer = 3              : green;
+      TRUE                                 : light;
+    esac;
+  next(timer) := case
+      next(light) != light : 0;
+      timer < 3            : timer + 1;
+      TRUE                 : timer;
+    esac;
+
+LTLSPEC NAME request_served := G (request -> F light = red)
+LTLSPEC NAME green_again    := G F light = green
+CTLSPEC NAME no_green_red   := AG (light = green -> AX light != red)
+INVARSPEC NAME timer_ok     := timer <= 3
+CTLSPEC NAME red_forever  := AG (light = red -> AX light = red)   -- false

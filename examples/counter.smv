@@ -1,0 +1,19 @@
+-- Button-driven modulo-4 counter with an input variable (IVAR).
+MODULE main
+IVAR
+  btn : boolean;
+VAR
+  cnt : 0..3;
+  on  : boolean;
+ASSIGN
+  init(cnt) := 0;
+  next(cnt) := btn ? (cnt + 1) mod 4 : cnt;
+  next(on)  := btn;
+DEFINE
+  full := cnt = 3;
+
+CTLSPEC NAME never_full   := AG (cnt < 3)          -- false: counterexample reaches cnt = 3
+CTLSPEC NAME can_reset    := AG EF cnt = 0         -- true
+LTLSPEC NAME always_full  := G F full              -- false: lasso where btn stays FALSE
+LTLSPEC NAME on_follows   := G (btn -> X on)       -- true
+INVARSPEC NAME in_range   := cnt <= 3              -- true

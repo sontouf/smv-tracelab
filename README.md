@@ -1,0 +1,131 @@
+# SMV TraceLab
+
+**NuSMV를 브라우저에서 시뮬레이션하고, trace를 FSM으로 보고, property 반례를 재생하는 도구**
+
+[![CI](https://github.com/sontouf/smv-tracelab/actions/workflows/ci.yml/badge.svg)](https://github.com/sontouf/smv-tracelab/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.9%2B-blue)
+![platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Docker-lightgrey)
+![license](https://img.shields.io/badge/license-MIT-green)
+
+SMV TraceLab은 실제 `NuSMV -int` 프로세스를 띄워 놓고 동작합니다. NuSMV의 `simulate -i`가 *"Choose a state from the above"* 하고 입력을 기다리면, 후보 상태를 표로 보여 주고 클릭한 번호를 NuSMV에 그대로 넘깁니다.
+결과 trace(`show_traces -v`)는 **표**와 **FSM 그래프**로 보여 주고, `check_property` 결과로 나온 **반례 trace도 같은 화면에서 한 스텝씩 재생**할 수 있습니다.
+
+![Verifier와 반례 재생](docs/verifier.png)
+
+## 빠른 시작
+
+Python 3.9 이상이 있으면 **설치 없이 바로** 실행할 수 있습니다. NuSMV가 없으면 첫 실행 때 FBK 공식 바이너리(2.7.1)를 자동으로 내려받습니다.
+
+```bash
+# uv (권장) — https://docs.astral.sh/uv/
+uvx --from git+https://github.com/sontouf/smv-tracelab smv-tracelab
+
+# 또는 pipx
+pipx run --spec git+https://github.com/sontouf/smv-tracelab smv-tracelab
+```
+
+실행한 디렉터리 아래의 `.smv` 파일이 목록에 나타나고, 브라우저가 자동으로 열립니다 (http://127.0.0.1:8780).
+
+### 설치해서 쓰기
+
+```bash
+pip install git+https://github.com/sontouf/smv-tracelab
+smv-tracelab                         # 현재 디렉터리의 .smv 목록
+smv-tracelab path/to/model.smv       # 바로 로드
+smv-tracelab --root ~/models --port 9000 --nusmv /opt/NuSMV/bin/NuSMV
+```
+
+### Docker (NuSMV 포함, 아무것도 설치하지 않을 때)
+
+```bash
+docker run --rm -p 8780:8780 -v "$PWD:/models" ghcr.io/sontouf/smv-tracelab
+```
+
+현재 디렉터리가 `/models`로 마운트됩니다. 마운트하지 않으면 내장 예제(`examples/`)가 보입니다. 이미지는 `linux/amd64`입니다 (Apple Silicon에서는 에뮬레이션으로 동작하며, pip/uvx 방식은 네이티브로 동작합니다).
+
+## 기능
+
+### 1. 대화형 시뮬레이션 (`pick_state -i`, `simulate -i -k N`)
+- 후보 상태를 표로 보여 줍니다. 후보끼리 값이 다르거나 현재 상태에서 바뀌는 변수만 기본으로 표시합니다. 행을 클릭하면 그 번호가 NuSMV에 입력됩니다.
+- `-k N`으로 N 스텝을 요청하면 N번 선택하게 됩니다. 아직 확정되지 않은 스텝은 trace/FSM에 점선으로 바로 나타납니다.
+- IVAR(입력 변수)가 있는 모델은 후보마다 입력값이 함께 표시됩니다.
+- 후보가 1개뿐일 때 NuSMV는 Return 입력을 기다립니다 → 자동으로 진행합니다.
+- 후보가 너무 많으면 NuSMV가 제약식을 요구합니다 → 화면에 입력창이 뜹니다.
+- `-c` / `-t` 제약, 랜덤 시뮬레이션(`-r`), "남은 스텝 모두 랜덤"을 지원합니다.
+- **분기**: 아무 스텝에서나 `goto_state`를 실행하면, 그 지점까지 복사한 새 trace에서 시뮬레이션을 이어갑니다.
+
+![대화형 시뮬레이션](docs/simulate.png)
+
+### 2. Trace → FSM 시각화
+- trace에서 방문한 상태를 노드로, 전이를 간선(스텝 번호와 입력값 라벨)으로 그립니다. 같은 상태를 다시 방문하면 사이클로 나타납니다.
+- **추상화**: FSM 상태를 구분할 변수를 고를 수 있습니다. 예를 들어 제어 상태 변수 하나만 고르면 수십 스텝짜리 trace가 몇 개 노드의 상태기계로 요약됩니다.
+- 재생(▶), 스텝 이동(← →), 슬라이더로 표와 FSM을 함께 움직일 수 있습니다. 노드를 클릭하면 해당 스텝으로 이동합니다.
+- 확대/이동/노드 드래그를 지원하고, SVG와 CSV로 내보낼 수 있습니다.
+
+![FSM 추상화](docs/fsm.png)
+
+### 3. Verifier
+- 모델의 `CTLSPEC` / `LTLSPEC` / `INVARSPEC` 목록과 검사 상태를 보여 줍니다. 개별 검사와 전체 검사를 지원합니다.
+- 식을 직접 입력해 검사할 수 있습니다 (`check_ltlspec -p`, `check_ctlspec -p`, `check_invar -p`).
+- **반례 재생**: false인 property의 반례 trace를 FSM과 표에서 한 스텝씩 재생합니다. LTL 반례의 loop 시작점(↺)도 표시합니다.
+- 반례의 원하는 스텝에서 분기해 **직접 시뮬레이션을 이어갈 수 있습니다** (예: "여기서 다른 입력을 주면 어떻게 될까?").
+
+### 4. 콘솔
+NuSMV와 주고받은 원본 입출력을 모두 볼 수 있고, 임의의 NuSMV 명령을 직접 보낼 수도 있습니다.
+
+## NuSMV 바이너리
+
+찾는 순서: `--nusmv` → `$NUSMV` → `PATH`의 `NuSMV`/`nusmv` → 자동 다운로드 캐시.
+
+| 플랫폼 | 자동 다운로드 | 비고 |
+|---|---|---|
+| Linux x86_64 | `NuSMV-2.7.1-linux64` | `libxml2`, `libedit`가 필요합니다 (`sudo apt install libxml2 libedit2`). Debian/Ubuntu의 `libedit.so.2`는 자동으로 연결됩니다. |
+| macOS (Intel/Apple Silicon) | `NuSMV-2.7.1-macos-universal` | |
+| Windows x64 | `NuSMV-2.7.1-win64` | `pywinpty`가 함께 설치됩니다. |
+| 그 외 (Linux ARM 등) | 없음 | 소스에서 빌드한 뒤 `--nusmv`로 지정하세요. |
+
+미리 받아 두려면 `smv-tracelab --install-nusmv`를 실행하세요. `--no-download`를 주면 자동 다운로드를 끕니다.
+NuSMV는 FBK-irst가 LGPL 2.1로 배포하는 별도 소프트웨어이며, 이 저장소에는 포함되어 있지 않습니다.
+
+## 동작 원리
+
+```
+브라우저 ──HTTP/JSON──▶ smv-tracelab (Python 표준 라이브러리 HTTP 서버)
+                              │  pty (Linux/macOS) / ConPTY (Windows)
+                              ▼
+                         NuSMV -int model.smv
+```
+
+- NuSMV를 파이프에 연결하면 출력이 버퍼에 쌓여서, 선택지 목록이 *답을 보낸 뒤에야* 나옵니다. 그래서 **가상 터미널(pty)** 에 연결합니다.
+- 출력 끝에 나오는 프롬프트(`NuSMV >`, `Choose a state…`, `Press Return…`, `further constraints: >`)를 보고 NuSMV가 무엇을 기다리는지 판단합니다.
+- 후보 목록은 항상 `-a` 옵션으로 받습니다. `-a`가 없으면 NuSMV가 이전 후보와 달라진 변수만 출력합니다.
+- 외부 의존성이 없습니다 (Windows에서만 `pywinpty` 사용). UI는 단일 HTML 파일이며 CDN을 쓰지 않아 오프라인에서도 동작합니다.
+
+## 주의
+
+- 서버는 NuSMV 세션 하나를 공유합니다. 여러 탭에서 동시에 조작하지 마세요.
+- 기본으로 `127.0.0.1`에만 열립니다. 웹 UI에서 임의의 NuSMV 명령과 파일 경로를 다룰 수 있으므로 `--host 0.0.0.0`으로 외부에 공개하지 마세요.
+
+## 개발
+
+```bash
+git clone https://github.com/sontouf/smv-tracelab && cd smv-tracelab
+pip install -e . pytest
+smv-tracelab --install-nusmv
+pytest -v
+```
+
+CI는 Linux/macOS/Windows에서 NuSMV 공식 바이너리를 내려받아 실제 프로세스로 테스트하고, `main`에 push할 때마다 Docker 이미지를 `ghcr.io/sontouf/smv-tracelab`에 게시합니다.
+
+---
+
+### English
+
+**SMV TraceLab** drives a real `NuSMV -int` process from your browser: it answers `simulate -i` / `pick_state -i` choice prompts with the state you click, renders traces as a table and as an (optionally abstracted) FSM graph with step-by-step playback, and checks CTL/LTL/INVAR properties, letting you replay counterexamples and branch from any step (`goto_state`) to keep simulating.
+
+```bash
+uvx --from git+https://github.com/sontouf/smv-tracelab smv-tracelab        # NuSMV is downloaded on first run
+docker run --rm -p 8780:8780 -v "$PWD:/models" ghcr.io/sontouf/smv-tracelab
+```
+
+MIT licensed. NuSMV is © FBK-irst, LGPL 2.1, and is not bundled.
