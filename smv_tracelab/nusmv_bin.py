@@ -56,13 +56,12 @@ def find_nusmv(explicit=None):
 def download_nusmv(log=print):
     name = _archive_name()
     if not name:
-        raise RuntimeError('이 플랫폼(%s/%s)용 공식 NuSMV 바이너리가 없습니다. '
-                           '소스(https://nusmv.fbk.eu)에서 빌드한 뒤 --nusmv 로 지정하세요.'
-                           % (sys.platform, platform.machine()))
+        raise RuntimeError('there is no official NuSMV binary for %s/%s; build it from source '
+                           '(https://nusmv.fbk.eu) and pass --nusmv' % (sys.platform, platform.machine()))
     url = BASE_URL + name
     dest = cache_dir() / ('NuSMV-' + NUSMV_VERSION)
-    log('NuSMV %s 다운로드: %s' % (NUSMV_VERSION, url))
-    log('  (NuSMV 는 FBK-irst 의 LGPL-2.1 소프트웨어입니다. https://nusmv.fbk.eu)')
+    log('Downloading NuSMV %s: %s' % (NUSMV_VERSION, url))
+    log('  (NuSMV is LGPL-2.1 software by FBK-irst, https://nusmv.fbk.eu)')
     with urllib.request.urlopen(url, timeout=120) as r:
         data = r.read()
     if dest.exists():
@@ -82,13 +81,13 @@ def download_nusmv(log=print):
             t.extractall(dest, members=members, **kw)
     exe = cached_binary()
     if not exe:
-        raise RuntimeError('다운로드한 아카이브에서 %s 를 찾지 못했습니다.' % EXE)
+        raise RuntimeError('%s not found in the downloaded archive' % EXE)
     os.chmod(exe, 0o755)
-    log('  설치됨: %s' % exe)
+    log('  installed: %s' % exe)
     return exe
 
 
-LIB_HINT = ('NuSMV 실행에 필요한 공유 라이브러리가 없습니다: %s\n'
+LIB_HINT = ('NuSMV needs shared libraries that are missing: %s\n'
             '  Debian/Ubuntu: sudo apt install libxml2 libedit2\n'
             '  Fedora/RHEL  : sudo dnf install libxml2 libedit')
 

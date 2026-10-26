@@ -23,6 +23,11 @@ def main(argv=None):
     ap.add_argument('--install-nusmv', action='store_true', help='download the official NuSMV binary and exit')
     ap.add_argument('--version', action='version', version='%(prog)s ' + __version__)
     a = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):  # e.g. cp1252 consoles on Windows
+        try:
+            stream.reconfigure(errors='replace')
+        except (AttributeError, ValueError):
+            pass
 
     if a.install_nusmv:
         print(download_nusmv())
@@ -31,11 +36,11 @@ def main(argv=None):
     nusmv = find_nusmv(a.nusmv)
     if not nusmv:
         if a.nusmv or a.no_download:
-            sys.exit('NuSMV 실행 파일을 찾을 수 없습니다. --nusmv 또는 NUSMV 환경변수로 지정하세요.')
+            sys.exit('NuSMV executable not found. Pass --nusmv or set the NUSMV environment variable.')
         try:
             nusmv = download_nusmv()
         except Exception as e:
-            sys.exit('NuSMV 자동 다운로드 실패: %s\n직접 설치 후 --nusmv 로 지정하세요 (https://nusmv.fbk.eu).' % e)
+            sys.exit('Could not download NuSMV: %s\nInstall it yourself (https://nusmv.fbk.eu) and pass --nusmv.' % e)
 
     session = Session(nusmv, a.root)
     if session.missing_libs:

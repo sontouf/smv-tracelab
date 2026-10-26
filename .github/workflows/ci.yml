@@ -30,6 +30,14 @@ jobs:
       - run: pip install . pytest
       - name: Download NuSMV (same path end users take)
         run: smv-tracelab --install-nusmv
+      - name: NuSMV smoke test
+        shell: bash
+        run: |
+          EXE=$(python -c "from smv_tracelab.nusmv_bin import find_nusmv; print(find_nusmv())")
+          echo "$EXE"
+          if [ "$RUNNER_OS" = macOS ]; then otool -L "$EXE"; fi
+          printf 'MODULE main\nVAR x : boolean;\n' > smoke.smv
+          "$EXE" smoke.smv
       - run: python -m pytest -v tests
         timeout-minutes: 10
 

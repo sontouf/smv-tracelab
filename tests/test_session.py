@@ -20,7 +20,8 @@ def s():
 
 def test_interactive_simulation(s):
     st = s.load(path='counter.smv')
-    assert st['load_ok'] and st['input_vars'] == ['btn']
+    assert st['load_ok'], st['load_output']
+    assert st['input_vars'] == ['btn']
     st = s.pick_init()
     assert st['mode'] == 'choose' and len(st['candidates']) == 2
     st = s.choose(st['candidates'][1]['index'])
