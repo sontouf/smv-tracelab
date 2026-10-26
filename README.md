@@ -80,7 +80,7 @@ NuSMV와 주고받은 원본 입출력을 모두 볼 수 있고, 임의의 NuSMV
 | 플랫폼 | 자동 다운로드 | 비고 |
 |---|---|---|
 | Linux x86_64 | `NuSMV-2.7.1-linux64` | `libxml2`, `libedit`가 필요합니다 (`sudo apt install libxml2 libedit2`). Debian/Ubuntu의 `libedit.so.2`는 자동으로 연결됩니다. |
-| macOS (Apple Silicon/Intel) | [이 저장소 Release의 universal 빌드](https://github.com/sontouf/smv-tracelab/releases/tag/nusmv-2.7.1) | FBK 공식 macOS 바이너리는 x86_64 전용이고 MacPorts 라이브러리에 링크되어 있어 일반 Mac에서 실행되지 않습니다. 그래서 수정하지 않은 공식 소스를 [CI에서 직접 빌드](.github/workflows/nusmv-macos.yml)한 자체 완결형 바이너리를 씁니다 (GMP/libxml2 제외, 시스템 libedit). |
+| macOS (Apple Silicon/Intel) | [이 저장소 Release의 universal 빌드](https://github.com/sontouf/smv-tracelab/releases/tag/nusmv-2.7.1) | FBK 공식 macOS 바이너리는 x86_64 전용이고 MacPorts 라이브러리에 링크되어 있어 일반 Mac에서 실행되지 않습니다. 그래서 공식 소스를 [CI에서 직접 빌드](.github/workflows/nusmv-macos.yml)한 자체 완결형 바이너리를 씁니다 (GMP/libxml2 제외, 시스템 libedit. 소스 변경은 빠진 `#include` 한 줄뿐). |
 | Windows x64 | `NuSMV-2.7.1-win64` | `pywinpty`와 `pyte`가 함께 설치됩니다. |
 | 그 외 (Linux ARM 등) | 없음 | 소스에서 빌드한 뒤 `--nusmv`로 지정하세요. |
 

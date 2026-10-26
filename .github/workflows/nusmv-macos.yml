@@ -1,4 +1,4 @@
-# Builds NuSMV from the unmodified FBK source as a self-contained macOS universal (arm64 + x86_64)
+# Builds NuSMV from the FBK source (plus one missing #include) as a self-contained macOS universal (arm64 + x86_64)
 # binary and publishes it as a release asset. The official macOS binary is x86_64-only and links
 # against MacPorts libraries, so it does not run on a stock Mac.
 name: Build NuSMV for macOS
@@ -22,7 +22,14 @@ jobs:
           echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
           echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
       - name: Source
-        run: curl -fsSL "https://nusmv.fbk.eu/distrib/${NUSMV_VERSION}/NuSMV-${NUSMV_VERSION}.tar.xz" | tar -xJ
+        run: |
+          curl -fsSL "https://nusmv.fbk.eu/distrib/${NUSMV_VERSION}/NuSMV-${NUSMV_VERSION}.tar.xz" | tar -xJ
+          # Without libxml2, traceCmd.c calls NuSMVCore_get_tool_name() (returns char*) without its
+          # declaration; recent clang rejects the implicit declaration, so add the missing include.
+          F="NuSMV-${NUSMV_VERSION}/code/nusmv/shell/trace/traceCmd.c"
+          sed -i '' 's|#include "nusmv/shell/trace/traceCmd.h"|#include "nusmv/shell/trace/traceCmd.h"\
+          #include "nusmv/core/cinit/cinit.h"|' "$F"
+          grep -n 'cinit/cinit.h' "$F"
       - name: Build
         working-directory: NuSMV-${{ env.NUSMV_VERSION }}
         run: |
@@ -45,7 +52,7 @@ jobs:
           mkdir -p "$D/bin"
           cp "NuSMV-${NUSMV_VERSION}/build/NuSMV" "$D/bin/"
           cp "NuSMV-${NUSMV_VERSION}/LGPL-2.1" "NuSMV-${NUSMV_VERSION}/COPYING" "$D/"
-          printf 'NuSMV %s built from the unmodified FBK source:\nhttps://nusmv.fbk.eu/distrib/%s/NuSMV-%s.tar.xz\nmeson options: universal binary, no GMP, no libxml2, system libedit.\nLicense: LGPL 2.1 (see LGPL-2.1). NuSMV is developed by FBK-irst.\n' \
+          printf 'NuSMV %s built from the FBK source:\nhttps://nusmv.fbk.eu/distrib/%s/NuSMV-%s.tar.xz\nOnly change: add the missing #include "nusmv/core/cinit/cinit.h" to code/nusmv/shell/trace/traceCmd.c.\nmeson options: universal binary, no GMP, no libxml2, system libedit.\nLicense: LGPL 2.1 (see LGPL-2.1). NuSMV is developed by FBK-irst.\n' \
             "$NUSMV_VERSION" "$NUSMV_VERSION" "$NUSMV_VERSION" > "$D/README.txt"
           tar -czf "$D.tar.gz" "$D"
           shasum -a 256 "$D.tar.gz"
@@ -56,5 +63,5 @@ jobs:
           TAG="nusmv-${NUSMV_VERSION}"
           gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "NuSMV ${NUSMV_VERSION} for macOS (universal)" \
-              --notes "Self-contained macOS build (arm64 + x86_64) of NuSMV ${NUSMV_VERSION} from the unmodified FBK source, downloaded automatically by SMV TraceLab on macOS. NuSMV is LGPL-2.1 software by FBK-irst: https://nusmv.fbk.eu (source: https://nusmv.fbk.eu/distrib/${NUSMV_VERSION}/NuSMV-${NUSMV_VERSION}.tar.xz)"
+              --notes "Self-contained macOS build (arm64 + x86_64) of NuSMV ${NUSMV_VERSION} from the FBK source (only change: a missing #include in traceCmd.c), downloaded automatically by SMV TraceLab on macOS. NuSMV is LGPL-2.1 software by FBK-irst: https://nusmv.fbk.eu (source: https://nusmv.fbk.eu/distrib/${NUSMV_VERSION}/NuSMV-${NUSMV_VERSION}.tar.xz)"
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber "NuSMV-${NUSMV_VERSION}-macos-universal.tar.gz"
