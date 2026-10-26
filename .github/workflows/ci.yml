@@ -50,7 +50,7 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: examples
         run: |
-          python -c "import time; from smv_tracelab import proc; from smv_tracelab.nusmv_bin import find_nusmv; p = proc.spawn([find_nusmv(), '-int', 'counter.smv'], cwd='.'); time.sleep(3); print(repr(p.read(1)[-600:])); [(p.write(c + '\n'), time.sleep(2), print('>>>', c, repr(p.read(1)[:1500]))) for c in ['go', 'show_vars -i', 'pick_state -i -a']]"
+          python -c "import time; from smv_tracelab import proc; from smv_tracelab.nusmv_bin import find_nusmv; p = proc.spawn([find_nusmv(), '-int', 'counter.smv'], cwd='.'); time.sleep(3); print(repr(p.read(1)[-300:]), repr(p.partial())); [(p.write(c + '\n'), time.sleep(2), print('>>>', c, repr(p.read(1)[:1500]), repr(p.partial()))) for c in ['go', 'show_vars -i', 'pick_state -i -a', '1']]"
       - run: python -m pytest -v tests
         timeout-minutes: 10
 

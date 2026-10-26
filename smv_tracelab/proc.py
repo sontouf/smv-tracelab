@@ -27,8 +27,11 @@ class _Base:
                     self._eof = True
                     self._cond.notify_all()
                     return
-                self._buf.append(data)
+                self._ingest(data)
                 self._cond.notify_all()
+
+    def _ingest(self, data):
+        self._buf.append(data)
 
     def _start_pump(self):
         threading.Thread(target=self._pump, daemon=True).start()
@@ -40,6 +43,10 @@ class _Base:
                 self._cond.wait(timeout)
             data, self._buf = ''.join(self._buf), []
             return data
+
+    def partial(self):
+        """Text of the line still being written (only non-empty for screen-based terminals)."""
+        return ''
 
     @property
     def eof(self):
@@ -87,19 +94,75 @@ class PosixPty(_Base):
             pass
 
 
+class ScreenText:
+    """Turns a terminal *screen* stream back into plain text.
+
+    ConPTY does not pass the program's bytes through: it repaints a virtual screen with cursor
+    moves, erase sequences and blank padding. We replay it on a pyte screen and hand out the lines
+    the cursor has left behind (they no longer change), plus the current line as `partial`.
+    """
+    COLS, ROWS = 512, 200
+
+    def __init__(self):
+        import pyte
+        outer = self
+
+        class _Screen(pyte.Screen):
+            def index(self):
+                bottom = self.margins.bottom if self.margins else self.lines - 1
+                if self.cursor.y == bottom:  # the top line scrolls off
+                    if outer.emitted > 0:
+                        outer.emitted -= 1
+                    else:
+                        outer.pending.append(outer.row(0))
+                super().index()
+
+        self.pending, self.emitted = [], 0
+        self.screen = _Screen(self.COLS, self.ROWS)
+        self.stream = pyte.Stream(self.screen)
+
+    def feed(self, data):
+        self.stream.feed(data)
+        y = self.screen.cursor.y
+        if y > self.emitted:
+            self.pending.extend(self.row(r) for r in range(self.emitted, y))
+            self.emitted = y
+        out, self.pending = self.pending, []
+        return ''.join(line + '\n' for line in out)
+
+    def row(self, y):
+        line = self.screen.buffer[y]  # sparse: only cells that were written
+        if not line:
+            return ''
+        return ''.join(line[x].data for x in range(max(line) + 1)).rstrip()
+
+    def partial(self):
+        return self.row(self.screen.cursor.y)
+
+
 class WinPty(_Base):
     def __init__(self, argv, cwd, env=None):
         try:
             from winpty import PtyProcess
         except ImportError:
-            raise RuntimeError('Windows 에서는 pywinpty 가 필요합니다: pip install pywinpty')
+            raise RuntimeError('pywinpty and pyte are required on Windows: pip install pywinpty pyte')
         super().__init__()
-        # 넓은 터미널로 만들어 ConPTY 의 줄바꿈 삽입을 피한다.
-        self.proc = PtyProcess.spawn(subprocess.list2cmdline(argv), cwd=cwd, env=env, dimensions=(50, 4000))
+        self.text = ScreenText()
+        self.proc = PtyProcess.spawn(subprocess.list2cmdline(argv), cwd=cwd, env=env,
+                                     dimensions=(ScreenText.ROWS, ScreenText.COLS))
         self._start_pump()
 
     def _read_chunk(self):
         return self.proc.read(65536)
+
+    def _ingest(self, data):
+        text = self.text.feed(data)
+        if text:
+            self._buf.append(text)
+
+    def partial(self):
+        with self._cond:
+            return self.text.partial()
 
     def write(self, text):
         self.proc.write(text.replace('\n', '\r\n'))

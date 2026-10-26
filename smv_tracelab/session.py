@@ -63,12 +63,15 @@ class Session:
         end = time.time() + timeout
         while True:
             self.buf += clean(self.p.read(0.1))
-            if echo is not None and self.buf.startswith(echo):
-                # ConPTY (Windows) echoes the line we typed.
-                self.buf = self.buf[len(echo):].lstrip('\n')
+            if echo and '\n' in self.buf and self.buf.split('\n', 1)[0].rstrip().endswith(echo):
+                # ConPTY (Windows) echoes the line we typed after the prompt.
+                self.buf = self.buf.split('\n', 1)[1]
+                echo = None
+            view = self.buf + clean(self.p.partial())
             for name, rx in PROMPTS:
-                m = rx.search(self.buf)
+                m = rx.search(view)
                 if m:
+                    self.buf = view
                     self.mode = name
                     self.prompt_info = {}
                     if name == 'choose':
