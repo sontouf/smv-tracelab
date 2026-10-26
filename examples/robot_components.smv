@@ -1,0 +1,61 @@
+-- Multi-component robot: a sensor (inputs), a controller that must pass through Stop
+-- before changing direction, and a motor driven by the controller's next state.
+MODULE main
+VAR
+  sensor : Sensor;
+  ctrl   : Controller(sensor.obstacle, sensor.halt);
+  motor  : Motor(ctrl.next_state);
+
+-- Changing direction always goes through Stop.
+LTLSPEC NAME stop_before_turn := G !(ctrl.state = Moving & X ctrl.state = Turning)
+-- The motor brakes exactly while the controller is in Stop.
+LTLSPEC NAME brake_in_stop    := G (ctrl.state = Stop <-> motor.motor = braking)
+-- False: the halt button can keep the robot idle forever.
+CTLSPEC NAME resumes          := AG (ctrl.state = Stop -> AF ctrl.state = Moving)
+INVARSPEC NAME no_idle_turn   := !(ctrl.state = Idle & motor.motor = turning)
+
+MODULE Sensor
+IVAR
+  obstacle : boolean;
+  halt     : boolean;
+
+MODULE Controller(obstacle, halt)
+VAR
+  state       : {Idle, Moving, Stop, Turning};
+  stop_target : {Idle, Moving, Turning};   -- where to go after Stop
+DEFINE
+  next_state :=
+    case
+      state = Stop                 : stop_target;
+      state = Idle & !halt         : Moving;
+      state = Moving & halt        : Stop;
+      state = Moving & obstacle    : Stop;
+      state = Turning & halt       : Stop;
+      state = Turning              : Moving;
+      TRUE                         : state;
+    esac;
+  next_target :=
+    case
+      state = Moving & halt        : Idle;
+      state = Moving & obstacle    : Turning;
+      state = Turning & halt       : Idle;
+      TRUE                         : stop_target;
+    esac;
+ASSIGN
+  init(state) := Idle;
+  init(stop_target) := Moving;
+  next(state) := next_state;
+  next(stop_target) := next_target;
+
+MODULE Motor(target)
+VAR
+  motor : {off, forward, braking, turning};
+ASSIGN
+  init(motor) := off;
+  next(motor) :=
+    case
+      target = Moving  : forward;
+      target = Stop    : braking;
+      target = Turning : turning;
+      TRUE             : off;
+    esac;

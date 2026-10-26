@@ -63,6 +63,9 @@ th.vname,td.vname{position:sticky;left:0;background:var(--panel);z-index:1;font-
 thead th.vname{z-index:3}
 td.chg{background:var(--chg);color:var(--chg-text);font-weight:600}
 tr.grp td{background:var(--bg);color:var(--muted);font:600 11px system-ui,sans-serif;letter-spacing:.04em}
+tr.grp.compstart td{border-top:2px solid var(--muted);color:var(--text)}
+.cand.twohead thead tr:nth-child(2) th{top:26px}
+th.comphead{text-align:center;background:var(--bg);font:700 12px var(--mono);border-bottom:2px solid var(--muted)}
 .kind{display:inline-block;font:600 10px system-ui,sans-serif;padding:0 5px;border-radius:4px;margin-right:6px;vertical-align:1px}
 .kind.i{background:var(--in);color:var(--in-text)}
 .kind.s{background:var(--accent-soft);color:var(--accent)}
@@ -112,8 +115,10 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
 #fsmWrap svg.panning{cursor:grabbing}
 .fsmtools{position:absolute;top:8px;right:8px;display:flex;gap:4px;z-index:2}
 .fsminfo{position:absolute;left:8px;bottom:8px;font:11.5px var(--mono);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.projbox{display:flex;flex-wrap:wrap;gap:4px 12px;max-height:150px;overflow:auto;padding:6px 0}
+.projbox{display:flex;flex-wrap:wrap;gap:4px 12px;max-height:220px;overflow:auto;padding:6px 0}
 .projbox label{display:flex;align-items:center;gap:4px;margin:0;font:12px var(--mono);color:var(--text)}
+.projgrp{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;width:100%;padding:3px 0;border-bottom:1px dashed var(--line)}
+.projgrp>button{font-family:var(--mono);font-weight:600}
 .pane-fsm,.pane-table{margin-bottom:10px}
 </style>
 <style id="fsmCss">
@@ -133,6 +138,8 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
 .fe text{fill:var(--muted);font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
 .fe.now text{fill:var(--accent);font-weight:700}
 .fe.future{opacity:.35}
+.fgtitle{fill:var(--text);font:700 15px system-ui,-apple-system,"Segoe UI",sans-serif}
+.fgcur{fill:var(--accent);font:600 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .arrow{fill:var(--faint)}.arrow.trav{fill:var(--muted)}.arrow.now{fill:var(--accent)}
 .initarrow{stroke:var(--text);stroke-width:1.6;fill:none}
 </style>
@@ -244,12 +251,19 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
     </div>
 
     <div class="pane-fsm" id="paneFsm">
+      <div class="toolbar">
+        <div class="seg" id="fsmModeSeg" role="group" aria-label="FSM 보기">
+          <button class="sm" data-m="single" title="선택한 변수 전체를 하나의 상태로 보는 FSM">단일 FSM</button>
+          <button class="sm" data-m="comp" title="모듈 인스턴스(컴포넌트)마다 따로 그린 FSM">컴포넌트별 FSM</button>
+        </div>
+        <label class="check" style="margin:0" title="끄면 현재 전이(파란 간선)에만 입력값을 표시합니다"><input type="checkbox" id="edgeInputs"> 모든 간선에 입력(IVAR) 표시</label>
+      </div>
       <details id="projDetails">
         <summary id="projSummary">FSM 상태를 구분할 변수</summary>
         <div class="toolbar mt" style="margin-bottom:0">
           <button class="sm" id="projAllVars">모든 VAR</button>
           <button class="sm" id="projNone">모두 해제</button>
-          <span class="hint">선택한 변수의 값이 같은 스텝은 하나의 노드로 합쳐집니다 (추상화). 예: 제어 상태 변수 하나만 고르면 상태기계 모양이 됩니다.</span>
+          <span class="hint">선택한 변수의 값이 같은 스텝은 하나의 노드로 합쳐집니다 (추상화). 컴포넌트 이름 버튼으로 해당 모듈 변수를 한 번에 선택/해제합니다.</span>
         </div>
         <div class="projbox" id="projBox"></div>
       </details>
@@ -307,7 +321,7 @@ let S = null, logPos = 0, busy = false;
 let cursor = 0, lastSig = '', playing = null;
 let viewMode = localGet('view','both');
 let proj = null, projModel = null;          // FSM 투영 변수
-let fsmPos = new Map(), fsmView = null, fsmSig = '';
+let fsmPos = new Map(), fsmView = null, fsmSig = '', fsmDragged = false, fsmMode = null;  // fsmMode null = 자동
 
 function localGet(k,d){ try{ return localStorage.getItem('smvtl.'+k) ?? d; }catch(e){ return d; } }
 function localSet(k,v){ try{ localStorage.setItem('smvtl.'+k,v); }catch(e){} }
@@ -354,6 +368,11 @@ function orderedNames(names){
   });
 }
 const val = (c,n)=> (n in c.input) ? c.input[n] : c.state[n];
+// 컴포넌트(모듈 인스턴스) 순서로 묶는다. 같은 컴포넌트 안에서는 orderedNames 순서(IVAR→VAR→DEFINE) 유지.
+function byComponent(names){
+  const ord=orderedNames(names), comps=componentsOf(S.vars.map(v=>v.name).concat(ord));
+  return ord.sort((a,b)=>comps.indexOf(compOf(a))-comps.indexOf(compOf(b)));
+}
 
 /* ================= render ================= */
 function render(){
@@ -367,7 +386,7 @@ function render(){
       : `<span style="color:var(--err)">● 로드 실패</span><div class="srcbox" style="color:var(--err);white-space:pre-wrap">${esc(S.load_output||'')}</div>`;
   }
   $('simTraceNo').textContent = S.sim_trace ? '#'+S.sim_trace : '—';
-  if(!S.model || projModel !== S.model.path){ proj=null; projModel = S.model && S.model.path; fsmPos=new Map(); }
+  if(!S.model || projModel !== S.model.path){ proj=null; fsmMode=null; projModel = S.model && S.model.path; fsmPos=new Map(); fsmDragged=false; }
   renderTraceSel(); renderChoice(); renderVerifier(); renderViewer(); setDisabled();
 }
 
@@ -414,13 +433,16 @@ function renderChoice(){
     return cur&&cur[n]!==undefined&&[...vals][0]!==cur[n];
   });
   if(!names.length) names=orderedNames(all);
+  const multiComp=componentsOf(names).length>1;
+  if(multiComp) names=byComponent(names);
+  const compRow=multiComp?'<tr><th class="vname"></th>'+componentsOf(names).map(c=>`<th colspan="${names.filter(n=>compOf(n)===c).length}" class="comphead">${esc(c)}</th>`).join('')+'</tr>':'';
   let h=`<div class="toolbar">
       <button class="primary sm" id="cRand">${S.mode==='single'?'진행 (Enter)':'랜덤 선택'}</button>
       ${run&&run.kind==='simulate'&&run.total-run.done>1?'<button class="sm" id="cRandAll">남은 스텝 모두 랜덤</button>':''}
       <span class="grow"></span>
       <label class="check" style="margin:0"><input type="checkbox" id="cAll" ${showAll?'checked':''}> 모든 변수</label>
       <span class="hint">기본: 후보 간 차이·현재 대비 변화가 있는 변수만 · 행 클릭 = 선택${cands.length<=10?' · 숫자키':''}</span></div>`;
-  h+=`<div class="tablewrap" style="max-height:45vh"><table class="cand"><thead><tr><th class="vname">#</th>${names.map(n=>`<th><span class="kind ${varKind(n)}">${KLABEL[varKind(n)]}</span>${esc(n)}</th>`).join('')}</tr></thead><tbody>`;
+  h+=`<div class="tablewrap" style="max-height:45vh"><table class="cand ${multiComp?'twohead':''}"><thead>${compRow}<tr><th class="vname">#</th>${names.map(n=>`<th><span class="kind ${varKind(n)}">${KLABEL[varKind(n)]}</span>${esc(n)}</th>`).join('')}</tr></thead><tbody>`;
   for(const c of cands){
     h+=`<tr data-i="${c.index}"><td class="vname idx">${c.index}</td>`;
     for(const n of names){
@@ -468,7 +490,16 @@ function renderVerifier(){
   const lc=S.last_check, vr=$('verResult');
   if(!lc){ vr.innerHTML=''; return; }
   let h=`<div class="vresult"><span class="muted mono" style="font-size:12px">${esc(lc.cmd)}</span>`;
-  for(const r of lc.results) h+=`<div><span class="${r.result==='true'?'t':'f'}">${r.result==='true'?'TRUE':'FALSE'}</span> <span class="mono">${esc(r.formula)}</span></div>`;
+  // property 이름 찾기 (NuSMV 가 출력하는 식과 show_property 의 식은 공백만 다를 수 있다)
+  const norm=t=>t.replace(/\s+/g,'');
+  const nameOf=f=>{ const p=S.props.find(p=>norm(p.formula)===norm(f)); return p&&p.name?p.name:null; };
+  const line=r=>`<div><span class="${r.result==='true'?'t':'f'}">${r.result==='true'?'TRUE':'FALSE'}</span> ${nameOf(r.formula)?`<b class="mono">${esc(nameOf(r.formula))}</b> `:''}<span class="mono">${esc(r.formula)}</span></div>`;
+  if(lc.results.length>3){
+    const nt=lc.results.filter(r=>r.result==='true').length, nf=lc.results.length-nt;
+    h+=`<div>${lc.results.length}개 검사: <span class="t">TRUE ${nt}</span> · <span class="f">FALSE ${nf}</span></div>`;
+    h+=lc.results.filter(r=>r.result!=='true').map(line).join('');
+    h+=`<details><summary>전체 결과 보기</summary>${lc.results.map(line).join('')}</details>`;
+  } else h+=lc.results.map(line).join('');
   if(lc.new_traces.length) h+=`<div class="mt">반례 trace: ${lc.new_traces.map(n=>`<button class="sm" data-cex="${n}">#${n} 재생 ▶</button>`).join(' ')} <span class="hint">FSM/표에서 단계별로 보고, 원하는 스텝에서 분기해 직접 시뮬레이션할 수 있습니다.</span></div>`;
   if(lc.error) h+=`<pre>${esc(lc.error)}</pre>`;
   vr.innerHTML=h+'</div>';
@@ -528,14 +559,19 @@ function renderTable(cols){
   let rx=null; try{ const f=$('varFilter').value.trim(); if(f) rx=new RegExp(f,'i'); }catch(e){}
   const showDef=$('showDefines').checked, onlyChg=$('onlyChanged').checked;
   let list=orderedNames(names).filter(n=>(showDef||varKind(n)!=='d')&&(!rx||rx.test(n)));
+  const multiComp=componentsOf(list).length>1;
+  if(multiComp) list=byComponent(list);
   if(onlyChg) list=list.filter(n=>new Set(cols.map(c=>val(c,n)).filter(v=>v!==undefined)).size>1);
   let h='<div class="tablewrap" id="tw"><table><thead><tr><th class="vname">변수 \\ 스텝</th>';
   cols.forEach((c,i)=>{ h+=`<th class="step ${c.pend?'pend':''} ${i===cursor?'cursor':''}" data-c="${i}" title="클릭: 이 스텝으로 이동">${esc(c.label)}${c.loop?' ↺':''}</th>`; });
   h+='</tr></thead><tbody>';
-  let lastKind=null;
+  let lastGrp=null;
   for(const n of list){
     const k=varKind(n);
-    if(k!==lastKind){ h+=`<tr class="grp"><td class="vname">${{i:'입력 (IVAR)',s:'상태 (VAR)',d:'DEFINE'}[k]}</td><td colspan="${cols.length}"></td></tr>`; lastKind=k; }
+    const grp=(multiComp?compOf(n)+' · ':'')+{i:'입력 (IVAR)',s:'상태 (VAR)',d:'DEFINE'}[k];
+    if(grp!==lastGrp){
+      const newComp=multiComp&&(!lastGrp||!lastGrp.startsWith(compOf(n)+' · '));
+      h+=`<tr class="grp ${newComp?'compstart':''}"><td class="vname">${esc(grp)}</td><td colspan="${cols.length}"></td></tr>`; lastGrp=grp; }
     h+=`<tr><td class="vname"><span class="kind ${k}">${KLABEL[k]}</span>${esc(n)}</td>`;
     let prev;
     cols.forEach((c,i)=>{
@@ -572,53 +608,88 @@ function startPlay(){
 function stopPlay(){ if(playing) clearTimeout(playing); playing=null; $('pPlay').textContent='▶ 재생'; }
 
 /* ================= FSM ================= */
-function defaultProj(){ return S.vars.filter(v=>!S.input_vars.includes(v.name)).map(v=>v.name); }
+// 컴포넌트 = 모듈 인스턴스 (변수 이름의 첫 '.' 앞부분). 최상위 변수는 main.
+const compOf=n=>n.includes('.')?n.split('.')[0]:'main';
+function varType(n){ const v=S.vars.find(v=>v.name===n); return v?v.type:''; }
+function isSymbolic(n){ // {Forward, Stop, ...}처럼 숫자가 아닌 값을 가진 열거형
+  const t=varType(n);
+  return t.startsWith('{') && t.slice(1,-1).split(',').some(x=>!/^\s*-?\d+\s*$/.test(x));
+}
+function stateNames(cols){ const a=new Set(); cols.forEach(c=>Object.keys(c.state).forEach(k=>a.add(k))); return orderedNames(a); }
+function componentsOf(names){ const seen=[]; names.forEach(n=>{ const c=compOf(n); if(!seen.includes(c)) seen.push(c); }); return seen; }
+function defaultProj(cols,mode){
+  // 기본 추상화: 열거형(제어 상태) 변수만. 타이머 같은 숫자 변수는 제외.
+  const st=stateNames(cols).filter(n=>varKind(n)==='s'), sym=st.filter(isSymbolic);
+  if(!sym.length) return st;
+  if(mode!=='comp') return sym;
+  // 컴포넌트마다: 이름에 state/mode 가 들어간 열거형 > 열거형 전체 > (열거형이 없으면) VAR 전체
+  return componentsOf(st).flatMap(c=>{
+    const mine=st.filter(n=>compOf(n)===c), symC=mine.filter(isSymbolic);
+    const named=symC.filter(n=>/state|mode/i.test(n.split('.').pop()));
+    return named.length?named:symC.length?symC:mine;
+  });
+}
+function fsmModeOf(cols){
+  if(fsmMode) return fsmMode;
+  return componentsOf(defaultProj(cols,'comp')).length>1?'comp':'single';
+}
 function effectiveProj(cols){
-  const avail=new Set(); cols.forEach(c=>Object.keys(c.state).forEach(k=>avail.add(k)));
+  const avail=new Set(stateNames(cols));
   if(proj) return proj.filter(n=>avail.has(n));
-  const p=defaultProj().filter(n=>avail.has(n));
-  return p.length?p:[...avail].filter(n=>varKind(n)==='s');
+  return defaultProj(cols,fsmModeOf(cols));
 }
 function renderProjBox(cols){
-  const avail=new Set(); cols.forEach(c=>Object.keys(c.state).forEach(k=>avail.add(k)));
-  const names=orderedNames(avail), ep=new Set(effectiveProj(cols));
-  $('projSummary').textContent=`FSM 상태를 구분할 변수 (${ep.size}/${names.length}) — ${proj?'사용자 선택':'기본: 모든 VAR'}`;
-  const sig=names.join(',')+'|'+[...ep].join(',');
+  const names=stateNames(cols), ep=new Set(effectiveProj(cols)), mode=fsmModeOf(cols);
+  document.querySelectorAll('#fsmModeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
+  $('projSummary').textContent=`FSM 상태를 구분할 변수 (${ep.size}/${names.length}) — ${proj?'사용자 선택':'기본: 열거형(제어 상태) 변수'}`;
+  const sig=mode+'|'+names.join(',')+'|'+[...ep].join(',');
   if($('projBox').dataset.sig===sig) return;
   $('projBox').dataset.sig=sig;
-  $('projBox').innerHTML=names.map(n=>`<label><input type="checkbox" value="${esc(n)}" ${ep.has(n)?'checked':''}><span class="kind ${varKind(n)}">${KLABEL[varKind(n)]}</span>${esc(n)}</label>`).join('');
-  $('projBox').querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
-    proj=[...$('projBox').querySelectorAll('input:checked')].map(x=>x.value); fsmPos=new Map(); fsmView=null; renderViewer();
+  const comps=componentsOf(names);
+  $('projBox').innerHTML=comps.map(c=>`<div class="projgrp"><button class="sm" data-comp="${esc(c)}" title="이 컴포넌트 전체 선택/해제">${esc(c)}</button>`+
+    names.filter(n=>compOf(n)===c).map(n=>`<label title="${esc(varType(n))}"><input type="checkbox" value="${esc(n)}" ${ep.has(n)?'checked':''}><span class="kind ${varKind(n)}">${KLABEL[varKind(n)]}</span>${esc(n)}</label>`).join('')+'</div>').join('');
+  const apply=()=>{ proj=[...$('projBox').querySelectorAll('input:checked')].map(x=>x.value); fsmPos=new Map(); fsmDragged=false; fsmView=null; renderViewer(); };
+  $('projBox').querySelectorAll('input').forEach(cb=>cb.onchange=apply);
+  $('projBox').querySelectorAll('[data-comp]').forEach(b=>b.onclick=()=>{
+    const cbs=[...b.parentElement.querySelectorAll('input')], all=cbs.every(x=>x.checked);
+    cbs.forEach(x=>x.checked=!all); apply();
   });
 }
 
-function buildGraph(cols){
-  const P=effectiveProj(cols), nodes=new Map(), edges=new Map(), order=[];
-  const keyOf=c=>P.map(n=>c.state[n]).join('\u0001');
-  const inputVars=S.input_vars;
+function inputLabel(inp){
+  // boolean 입력은 TRUE 인 것만 짧은 이름으로 (front·left), 모두 FALSE 면 ∅
+  const ks=S.input_vars.filter(v=>v in inp); if(!ks.length) return '';
+  const short=v=>v.split('.').pop();
+  const parts=ks.map(v=>inp[v]==='TRUE'?short(v):inp[v]==='FALSE'?null:`${short(v)}=${inp[v]}`).filter(Boolean);
+  return parts.length?parts.join('·'):'∅';
+}
+
+function buildGraph(cols,P,gid){
+  const nodes=new Map(), edges=new Map(), order=[];
+  const keyOf=c=>gid+'\u0004'+P.map(n=>c.state[n]).join('\u0001');
   let prev=null;
   cols.forEach((c,i)=>{
     const k=keyOf(c);
     if(!nodes.has(k)){ const nd={key:k,vals:Object.fromEntries(P.map(n=>[n,c.state[n]])),first:i,visits:[],pend:c.pend,loop:false}; nodes.set(k,nd); order.push(nd); }
     const nd=nodes.get(k); nd.visits.push(i); if(!c.pend) nd.pend=false; if(c.loop) nd.loop=true;
     if(prev!==null){
-      const inp=inputVars.filter(v=>v in c.input).map(v=>`${v}=${c.input[v]}`).join(' ');
       const ek=prev+'\u0002'+k;
       if(!edges.has(ek)) edges.set(ek,{from:prev,to:k,inputs:new Set(),steps:[],pend:true});
-      const e=edges.get(ek); e.steps.push(i); if(inp) e.inputs.add(inp); if(!c.pend) e.pend=false;
+      const e=edges.get(ek), inp=inputLabel(c.input); e.steps.push(i); if(inp) e.inputs.add(inp); if(!c.pend) e.pend=false;
     }
     prev=k;
   });
   // 노드 라벨: 노드들 사이에서 값이 달라지는 투영 변수만 (고정 값은 하단 정보줄에)
   const varying=P.filter(n=>new Set(order.map(nd=>nd.vals[n])).size>1);
   const fixed=P.filter(n=>!varying.includes(n));
-  return {P,nodes,order,edges:[...edges.values()],varying,fixed};
+  return {name:gid,P,nodes,order,edges:[...edges.values()],varying,fixed};
 }
 
-function nodeLabel(nd,varying){
-  if(!varying.length) return ['(state)'];
+function nodeLabel(nd,varying,strip){
+  const nm=n=>strip&&n.startsWith(strip+'.')?n.slice(strip.length+1):n;
+  if(!varying.length) return [nd.vals[Object.keys(nd.vals)[0]]??'(state)'];
   if(varying.length===1) return [String(nd.vals[varying[0]])];
-  const lines=varying.slice(0,6).map(n=>`${n}=${nd.vals[n]}`);
+  const lines=varying.slice(0,6).map(n=>`${nm(n)}=${nd.vals[n]}`);
   if(varying.length>6) lines.push(`… +${varying.length-6}`);
   return lines;
 }
@@ -636,12 +707,22 @@ function layoutGraph(G){
   const lblW=Math.max(0,...G.edges.filter(e=>e.from!==e.to).map(e=>Math.max(...e.lbl.map(t=>t.length))*6.7));
   const colW=Math.max(...G.order.map(n=>n.w))+Math.min(320,Math.max(90,lblW+36));
   const maxInLayer=Math.max(...[...byL.values()].map(a=>a.length));
-  const rowH=Math.max(...G.order.map(n=>n.h))+46;
+  const rowH=Math.max(...G.order.map(n=>n.h))+60;
   const bandH=maxInLayer*rowH+90;
   for(const [l,arr] of byL){
     const band=Math.floor(l/perRow), pos=l%perRow, x=(band%2===0?pos:perRow-1-pos)*colW;
     arr.forEach((n,i)=>{ n.x=x; n.y=band*bandH+(i-(arr.length-1)/2)*rowH+(maxInLayer-1)*rowH/2; });
   }
+}
+
+function circleLayout(G){
+  // 노드가 적은 컴포넌트 FSM: 첫 방문 순서대로 원 위에 놓아 순환(예: Forward→Stop→Turn→Forward)이 보이게 한다.
+  const n=G.order.length;
+  if(n===1){ G.order[0].x=0; G.order[0].y=0; return; }
+  const maxW=Math.max(...G.order.map(v=>v.w)), maxH=Math.max(...G.order.map(v=>v.h));
+  const R=Math.max(n<=2?140:110,(n*(maxW+70))/(2*Math.PI));
+  G.order.forEach((v,i)=>{ const a=Math.PI+2*Math.PI*i/n; v.x=R*Math.cos(a); v.y=(R*0.72+maxH)*Math.sin(a); });
+  G.circle=true;
 }
 
 function rectExit(n,tx,ty){
@@ -658,74 +739,107 @@ function renderFsm(cols){
   const svg=$('fsmSvgEl');
   renderProjBox(cols);
   if(!cols.length){ svg.innerHTML=''; $('fsmInfo').textContent='trace 가 없습니다.'; return; }
-  const G=buildGraph(cols);
-  if(!G.P.length){ svg.innerHTML=''; $('fsmInfo').textContent='FSM 상태를 구분할 변수를 하나 이상 선택하세요.'; return; }
-  if(G.order.length>600){ svg.innerHTML=''; $('fsmInfo').textContent=`노드가 ${G.order.length}개로 너무 많습니다. 위에서 FSM 변수 수를 줄여 추상화하세요.`; return; }
-  // 노드 크기
-  G.edges.forEach(e=>{ const ins=[...e.inputs];
-    e.lbl=[fmtSteps(e.steps,cols)].concat(ins.length?[ins.slice(0,2).join(' | ')+(ins.length>2?` | …(+${ins.length-2})`:'')]:[]); });
-  G.order.forEach(n=>{ n.lines=nodeLabel(n,G.varying); n.w=Math.max(54,Math.max(...n.lines.map(s=>s.length))*7.4+22); n.h=n.lines.length*15+14; });
-  const sig=(S.trace?S.trace.number:'')+'|'+G.P.join(',')+'|'+G.order.map(n=>n.key).join('\u0003');
-  if(sig!==fsmSig||G.order.some(n=>!fsmPos.has(n.key))){ layoutGraph(G); G.order.forEach(n=>{ if(!fsmPos.has(n.key)) fsmPos.set(n.key,{x:n.x,y:n.y}); }); }
-  G.order.forEach(n=>{ const p=fsmPos.get(n.key); n.x=p.x; n.y=p.y; });
-  const relayoutNeeded=sig!==fsmSig && fsmSig.split('|')[0]!==sig.split('|')[0];
+  const mode=fsmModeOf(cols), P=effectiveProj(cols);
+  if(!P.length){ svg.innerHTML=''; $('fsmInfo').textContent='FSM 상태를 구분할 변수를 하나 이상 선택하세요.'; return; }
+  const groups=mode==='comp'?componentsOf(P).map(c=>({name:c,P:P.filter(n=>compOf(n)===c)})):[{name:'',P}];
+  const Gs=groups.map(g=>buildGraph(cols,g.P,g.name));
+  const total=Gs.reduce((a,G)=>a+G.order.length,0);
+  if(total>600){ svg.innerHTML=''; $('fsmInfo').textContent=`노드가 ${total}개로 너무 많습니다. 위에서 FSM 변수 수를 줄여 추상화하세요.`; return; }
+  const showIn=$('edgeInputs').checked;
+  Gs.forEach(G=>{
+    G.edges.forEach(e=>{ const ins=[...e.inputs];
+      const nowIn=inputLabel(cols[cursor]&&e.steps.includes(cursor)?cols[cursor].input:{});
+      e.lbl=[fmtSteps(e.steps,cols)].concat(showIn&&ins.length?[ins.slice(0,3).join(' | ')+(ins.length>3?` …(+${ins.length-3})`:'')]:nowIn?['입력: '+nowIn]:[]); });
+    G.order.forEach(n=>{ n.lines=nodeLabel(n,G.varying,G.name); n.w=Math.max(54,Math.max(...n.lines.map(s=>String(s).length))*7.4+22); n.h=n.lines.length*15+14; });
+  });
+  const allNodes=Gs.flatMap(G=>G.order);
+  $('fsmWrap').style.height=mode==='comp'&&Gs.length>1?'640px':'';
+  const sig=(S.trace?S.trace.number:'')+'|'+mode+'|'+P.join(',')+'|'+allNodes.map(n=>n.key).join('\u0003')+'|'+showIn;
+  if(sig!==fsmSig||allNodes.some(n=>!fsmPos.has(n.key))){
+    // 컴포넌트 그래프를 위에서 아래로 쌓는다. 사용자가 노드를 옮겼다면 기존 위치는 유지.
+    // 컴포넌트 그래프는 격자(2~3열)로 배치한다. 사용자가 노드를 옮겼다면 기존 위치는 유지.
+    if(!fsmDragged) fsmPos=new Map();
+    const ncol=Gs.length<=1?1:Gs.length<=4?2:3, gapX=160, gapY=170;
+    const boxes=Gs.map(G=>{
+      if(mode==='comp'&&G.order.length<=14) circleLayout(G); else layoutGraph(G);
+      const x0=Math.min(...G.order.map(n=>n.x-n.w/2)), x1=Math.max(...G.order.map(n=>n.x+n.w/2));
+      const y0=Math.min(...G.order.map(n=>n.y-n.h/2)), y1=Math.max(...G.order.map(n=>n.y+n.h/2));
+      return {G,x0,y0,w:Math.max(x1-x0,260),h:y1-y0};
+    });
+    const colW=[...Array(ncol)].map((_,c)=>Math.max(...boxes.filter((b,i)=>i%ncol===c).map(b=>b.w)));
+    let yOff=0;
+    for(let r=0;r*ncol<boxes.length;r++){
+      const row=boxes.slice(r*ncol,r*ncol+ncol); let xOff=0;
+      row.forEach((b,c)=>{ b.G.order.forEach(n=>{ if(!fsmPos.has(n.key)) fsmPos.set(n.key,{x:n.x-b.x0+xOff,y:n.y-b.y0+yOff}); }); xOff+=colW[c]+gapX; });
+      yOff+=Math.max(...row.map(b=>b.h))+gapY;
+    }
+  }
+  allNodes.forEach(n=>{ const p=fsmPos.get(n.key); n.x=p.x; n.y=p.y; });
+  const relayoutNeeded=sig!==fsmSig && fsmSig.split('|').slice(0,3).join('|')!==sig.split('|').slice(0,3).join('|');
   fsmSig=sig;
 
-  const curKey=G.order.find(n=>n.visits.includes(cursor))?.key;
-  const pair=new Set(G.edges.map(e=>e.from+'\u0002'+e.to));
-  const multi=new Map(); // 같은 방향 평행 간선 오프셋
   let h=`<defs>${['','trav','now'].map(c=>`<marker id="ar${c}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow ${c}" d="M0,0L10,5L0,10z"/></marker>`).join('')}</defs><g id="vp">`;
-  const nodeBy=new Map(G.order.map(n=>[n.key,n]));
-  for(const e of G.edges){
-    const a=nodeBy.get(e.from), b=nodeBy.get(e.to);
-    const trav=e.steps.some(s=>s<=cursor), now=e.steps.includes(cursor);
-    const cls=`fe ${now?'now':trav?'trav':'future'} ${e.pend?'pend':''}`;
-    const mk=now?'arnow':trav?'artrav':'ar';
-    const lbl=e.lbl;
-    let d, lx, ly;
-    if(e.from===e.to){
-      const k=(multi.get(e.from+'self')||0); multi.set(e.from+'self',k+1);
-      const r=18+k*10, x0=a.x-10, x1=a.x+10, y=a.y-a.h/2;
-      d=`M${x0},${y} C${x0-r*1.6},${y-r*2.4} ${x1+r*1.6},${y-r*2.4} ${x1},${y}`; lx=a.x; ly=y-r*1.9-4;
-    }else{
-      const pk=e.from+'\u0002'+e.to, k=(multi.get(pk)||0); multi.set(pk,k+1);
-      const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
-      const back=dx<-1||(Math.abs(dx)<1&&dy<0);
-      let off=(pair.has(e.to+'\u0002'+e.from)?22:0)+k*18+(back?Math.min(120,30+len*0.15):0);
-      const mx=(a.x+b.x)/2-dy/len*off, my=(a.y+b.y)/2+dx/len*off;
-      const [sx,sy]=rectExit(a,mx,my), [tx,ty]=rectExit(b,mx,my);
-      d=`M${sx},${sy} Q${mx},${my} ${tx},${ty}`;
-      lx=0.25*sx+0.5*mx+0.25*tx; ly=0.25*sy+0.5*my+0.25*ty-4;
+  const curKeys=[];
+  for(const G of Gs){
+    const curKey=G.order.find(n=>n.visits.includes(cursor))?.key; if(curKey) curKeys.push(curKey);
+    const nodeBy=new Map(G.order.map(n=>[n.key,n]));
+    if(mode==='comp'){
+      const x0=Math.min(...G.order.map(n=>n.x-n.w/2)), y0=Math.min(...G.order.map(n=>n.y-n.h/2));
+      const cur=G.order.find(n=>n.key===curKey);
+      h+=`<text class="fgtitle" x="${x0-40}" y="${y0-58}">${esc(G.name)}${cur?` <tspan class="fgcur">= ${esc(nodeLabel(cur,G.varying,G.name).join(', '))}</tspan>`:''}</text>`;
     }
-    h+=`<g class="${cls}"><path d="${d}" marker-end="url(#${mk})"/>${lbl.map((t,i)=>`<text x="${lx}" y="${ly+i*13-(lbl.length-1)*13}" text-anchor="middle">${esc(t)}</text>`).join('')}</g>`;
-  }
-  // 초기 화살표
-  const n0=G.order[0];
-  h+=`<path class="initarrow" d="M${n0.x-n0.w/2-34},${n0.y} L${n0.x-n0.w/2-4},${n0.y}" marker-end="url(#artrav)"/>`;
-  for(const n of G.order){
-    const visited=n.visits.some(v=>v<=cursor);
-    const cls=`fn ${n.key===curKey?'cur':visited?'visited':'future'} ${n===n0?'init':''} ${n.pend?'pend':''}`;
-    const title=Object.entries(n.vals).map(([k,v])=>`${k} = ${v}`).join('\n')+`\n\n방문 스텝: ${n.visits.map(i=>cols[i].label).join(', ')}`;
-    h+=`<g class="${cls}" data-k="${esc(n.key)}" transform="translate(${n.x},${n.y})"><title>${esc(title)}</title><rect x="${-n.w/2}" y="${-n.h/2}" width="${n.w}" height="${n.h}" rx="8"/>`;
-    n.lines.forEach((t,i)=>{ h+=`<text text-anchor="middle" x="0" y="${-n.h/2+19+i*15}">${esc(t)}</text>`; });
-    if(n.loop) h+=`<text class="badge-loop" x="${n.w/2-4}" y="${-n.h/2-4}" text-anchor="end">↺ loop</text>`;
-    h+='</g>';
+    const pair=new Set(G.edges.map(e=>e.from+'\u0002'+e.to)), multi=new Map();
+    for(const e of G.edges){
+      const a=nodeBy.get(e.from), b=nodeBy.get(e.to);
+      const trav=e.steps.some(s=>s<=cursor), now=e.steps.includes(cursor);
+      const cls=`fe ${now?'now':trav?'trav':'future'} ${e.pend?'pend':''}`, mk=now?'arnow':trav?'artrav':'ar';
+      let d, lx, ly;
+      if(e.from===e.to){
+        const k=(multi.get(e.from+'self')||0); multi.set(e.from+'self',k+1);
+        const r=18+k*10, x0=a.x-10, x1=a.x+10, y=a.y-a.h/2;
+        d=`M${x0},${y} C${x0-r*1.6},${y-r*2.4} ${x1+r*1.6},${y-r*2.4} ${x1},${y}`; lx=a.x; ly=y-r*1.9-4;
+      }else{
+        const pk=e.from+'\u0002'+e.to, k=(multi.get(pk)||0); multi.set(pk,k+1);
+        const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
+        const back=!G.circle&&(dx<-1||(Math.abs(dx)<1&&dy<0));
+        const off=(pair.has(e.to+'\u0002'+e.from)?22:0)+k*18+(back?Math.min(120,30+len*0.15):0);
+        const mx=(a.x+b.x)/2-dy/len*off, my=(a.y+b.y)/2+dx/len*off;
+        const [sx,sy]=rectExit(a,mx,my), [tx,ty]=rectExit(b,mx,my);
+        d=`M${sx},${sy} Q${mx},${my} ${tx},${ty}`;
+        lx=0.25*sx+0.5*mx+0.25*tx; ly=0.25*sy+0.5*my+0.25*ty-4;
+      }
+      h+=`<g class="${cls}"><path d="${d}" marker-end="url(#${mk})"/>${e.lbl.map((t,i)=>`<text x="${lx}" y="${ly+i*13-(e.lbl.length-1)*13}" text-anchor="middle">${esc(t)}</text>`).join('')}</g>`;
+    }
+    const n0=G.order[0];
+    h+=`<path class="initarrow" d="M${n0.x-n0.w/2-34},${n0.y} L${n0.x-n0.w/2-4},${n0.y}" marker-end="url(#artrav)"/>`;
+    for(const n of G.order){
+      const visited=n.visits.some(v=>v<=cursor);
+      const cls=`fn ${n.key===curKey?'cur':visited?'visited':'future'} ${n===n0?'init':''} ${n.pend?'pend':''}`;
+      const title=Object.entries(n.vals).map(([k,v])=>`${k} = ${v}`).join('\n')+`\n\n방문 스텝: ${n.visits.map(i=>cols[i].label).join(', ')}`;
+      h+=`<g class="${cls}" data-k="${esc(n.key)}" transform="translate(${n.x},${n.y})"><title>${esc(title)}</title><rect x="${-n.w/2}" y="${-n.h/2}" width="${n.w}" height="${n.h}" rx="8"/>`;
+      n.lines.forEach((t,i)=>{ h+=`<text text-anchor="middle" x="0" y="${-n.h/2+19+i*15}">${esc(t)}</text>`; });
+      if(n.loop) h+=`<text class="badge-loop" x="${n.w/2-4}" y="${-n.h/2-4}" text-anchor="end">↺ loop</text>`;
+      h+='</g>';
+    }
   }
   svg.innerHTML=h+'</g>';
-  const fixedTxt=G.fixed.length?` · 고정: ${G.fixed.slice(0,4).map(n=>n+'='+G.order[0].vals[n]).join(', ')}${G.fixed.length>4?' …':''}`:'';
-  $('fsmInfo').textContent=`노드 ${G.order.length} · 간선 ${G.edges.length} · 스텝 ${cols.length}${fixedTxt}`;
+  const edgesN=Gs.reduce((a,G)=>a+G.edges.length,0);
+  const fixed=mode==='single'?Gs[0].fixed:[];
+  const fixedTxt=fixed.length?` · 고정: ${fixed.slice(0,4).map(n=>n+'='+Gs[0].order[0].vals[n]).join(', ')}${fixed.length>4?' …':''}`:'';
+  $('fsmInfo').textContent=`${mode==='comp'?`컴포넌트 ${Gs.length} · `:''}노드 ${total} · 간선 ${edgesN} · 스텝 ${cols.length}${fixedTxt}${S.input_vars.length?' · 입력: TRUE 인 boolean 만 표시, ∅ = 모두 FALSE':''}`;
   if(!fsmView||relayoutNeeded) fitFsm(); else applyView();
   // 현재 노드가 화면 밖이면 전체 맞춤 (시뮬레이션으로 노드가 늘어날 때 따라가기)
-  const cn=curKey&&nodeBy.get(curKey), wrap=$('fsmWrap');
-  if(cn&&fsmView){ const x=cn.x*fsmView.s+fsmView.tx, y=cn.y*fsmView.s+fsmView.ty;
-    if(x<20||y<20||x>wrap.clientWidth-20||y>wrap.clientHeight-20) fitFsm(); }
-  bindFsm(G,cols);
+  const wrap=$('fsmWrap');
+  for(const k of curKeys){ const p=fsmPos.get(k); if(!p||!fsmView) continue;
+    const x=p.x*fsmView.s+fsmView.tx, y=p.y*fsmView.s+fsmView.ty;
+    if(x<20||y<20||x>wrap.clientWidth-20||y>wrap.clientHeight-20){ fitFsm(); break; } }
+  bindFsm(allNodes,cols);
 }
 
 function bbox(){
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
   document.querySelectorAll('#vp .fn').forEach(g=>{ const k=g.dataset.k, p=fsmPos.get(k), r=g.querySelector('rect'); const w=+r.getAttribute('width'), hh=+r.getAttribute('height');
-    x0=Math.min(x0,p.x-w/2-40); x1=Math.max(x1,p.x+w/2+20); y0=Math.min(y0,p.y-hh/2-60); y1=Math.max(y1,p.y+hh/2+40); });
+    x0=Math.min(x0,p.x-w/2-50); x1=Math.max(x1,p.x+w/2+20); y0=Math.min(y0,p.y-hh/2-75); y1=Math.max(y1,p.y+hh/2+40); });
   return {x0,y0,x1,y1};
 }
 function fitFsm(){
@@ -737,17 +851,17 @@ function fitFsm(){
 }
 function applyView(){ const vp=$('vp'); if(vp&&fsmView) vp.setAttribute('transform',`translate(${fsmView.tx},${fsmView.ty}) scale(${fsmView.s})`); }
 
-function bindFsm(G,cols){
-  const svg=$('fsmSvgEl');
+function bindFsm(nodes,cols){
+  const svg=$('fsmSvgEl'), byKey=new Map(nodes.map(n=>[n.key,n]));
   svg.querySelectorAll('.fn').forEach(g=>{
     g.addEventListener('pointerdown',ev=>{
       ev.stopPropagation(); stopPlay();
       const k=g.dataset.k, p=fsmPos.get(k), sx=ev.clientX, sy=ev.clientY, ox=p.x, oy=p.y; let moved=false;
       g.setPointerCapture(ev.pointerId);
-      const mv=e=>{ const dx=(e.clientX-sx)/fsmView.s, dy=(e.clientY-sy)/fsmView.s; if(Math.abs(dx)+Math.abs(dy)>3) moved=true; fsmPos.set(k,{x:ox+dx,y:oy+dy}); if(moved) g.setAttribute('transform',`translate(${ox+dx},${oy+dy})`); };
+      const mv=e=>{ const dx=(e.clientX-sx)/fsmView.s, dy=(e.clientY-sy)/fsmView.s; if(Math.abs(dx)+Math.abs(dy)>3) moved=true; if(moved){ fsmPos.set(k,{x:ox+dx,y:oy+dy}); g.setAttribute('transform',`translate(${ox+dx},${oy+dy})`); } };
       const up=()=>{ g.removeEventListener('pointermove',mv); g.removeEventListener('pointerup',up);
-        if(moved) renderFsm(cols);
-        else{ const nd=G.order.find(n=>n.key===k); const nx=nd.visits.find(v=>v>cursor); setCursor(nx!==undefined?nx:nd.visits[0]); } };
+        if(moved){ fsmDragged=true; renderFsm(cols); }
+        else{ const nd=byKey.get(k); const nx=nd.visits.find(v=>v>cursor); setCursor(nx!==undefined?nx:nd.visits[0]); } };
       g.addEventListener('pointermove',mv); g.addEventListener('pointerup',up);
     });
   });
@@ -830,10 +944,13 @@ $('pBranch').onclick=()=>{
   stopPlay(); api('/api/goto',{label:c.label});
 };
 $('fsmFit').onclick=fitFsm;
-$('fsmRelayout').onclick=()=>{ fsmPos=new Map(); fsmSig=''; renderViewer(); fitFsm(); };
+$('fsmRelayout').onclick=()=>{ resetFsm(); fitFsm(); };
 $('fsmSvg').onclick=exportSvg;
-$('projAllVars').onclick=()=>{ proj=defaultProj(); fsmPos=new Map(); fsmView=null; $('projBox').dataset.sig=''; renderViewer(); };
-$('projNone').onclick=()=>{ proj=[]; fsmPos=new Map(); fsmView=null; $('projBox').dataset.sig=''; renderViewer(); };
+const resetFsm=()=>{ fsmPos=new Map(); fsmDragged=false; fsmView=null; fsmSig=''; $('projBox').dataset.sig=''; renderViewer(); };
+$('projAllVars').onclick=()=>{ proj=stateNames(traceColumns()).filter(n=>varKind(n)==='s'); resetFsm(); };
+$('projNone').onclick=()=>{ proj=[]; resetFsm(); };
+document.querySelectorAll('#fsmModeSeg button').forEach(b=>b.onclick=()=>{ fsmMode=b.dataset.m; resetFsm(); });
+$('edgeInputs').onchange=resetFsm;
 ['varFilter','showDefines','onlyChanged'].forEach(id=>$(id).addEventListener('input',()=>S&&renderTable(traceColumns())));
 $('btnCsv').onclick=exportCsv;
 $('btnClearCon').onclick=()=>{ $('console').innerHTML=''; };

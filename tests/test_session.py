@@ -67,3 +67,31 @@ def test_verifier_counterexamples(s):
     assert st['last_check']['results'][0]['result'] == 'false' and st['last_check']['new_traces']
     st = s.check_formula('ctl', 'AG (')
     assert st['last_check']['error']
+
+
+def test_multi_component_inputs_and_stop(s):
+    st = s.load(path='robot_components.smv')
+    assert st['load_ok'], st['load_output']
+    assert st['input_vars'] == ['sensor.obstacle', 'sensor.halt']
+    st = s.pick_init()
+    assert st['mode'] == 'single'
+    st = s.choose()
+    # Idle -> Moving -> (obstacle) Stop -> Turning: inputs live in the sensor sub-module
+    st = s.simulate(3)
+    plan = [('FALSE', 'FALSE'), ('TRUE', 'FALSE'), ('FALSE', 'FALSE')]
+    for obstacle, halt in plan:
+        assert st['mode'] in ('choose', 'single')
+        if st['mode'] == 'single':
+            st = s.choose()
+            continue
+        pick = next(c for c in st['candidates']
+                    if c['input'] == {'sensor.obstacle': obstacle, 'sensor.halt': halt})
+        st = s.choose(pick['index'])
+    assert st['mode'] == 'idle'
+    steps = st['trace']['steps']
+    assert [x['state']['ctrl.state'] for x in steps] == ['Idle', 'Moving', 'Stop', 'Turning']
+    assert [x['state']['motor.motor'] for x in steps] == ['off', 'forward', 'braking', 'turning']
+    assert steps[2]['input'] == {'sensor.obstacle': 'TRUE', 'sensor.halt': 'FALSE'}
+    st = s.check()
+    assert {p['name']: p['status'] for p in st['props']} == {
+        'stop_before_turn': 'True', 'brake_in_stop': 'True', 'resumes': 'False', 'no_idle_turn': 'True'}

@@ -64,6 +64,15 @@ docker run --rm -p 8780:8780 -v "$PWD:/models" ghcr.io/sontouf/smv-tracelab
 
 ![FSM 추상화](docs/fsm.png)
 
+#### 여러 컴포넌트(모듈 인스턴스)로 된 모델
+`sensor : Sensor; controller : Controller(...); motor : Motor(controller.next_state)`처럼 여러 모듈로 나뉜 모델은 **컴포넌트별 FSM**으로 자동 전환됩니다.
+- 컴포넌트마다 별도의 FSM을 그리고, 같은 재생 커서에 맞춰 함께 움직입니다. 예를 들어 controller가 `Moving → Stop → Turning`으로 가는 순간 motor는 `forward → braking → turning`으로 갑니다.
+- 기본 추상화는 컴포넌트별 제어 상태 변수입니다(`state`/`mode` 이름의 열거형 → 다른 열거형 → 그 컴포넌트의 VAR 전체 순). 타이머 같은 숫자 변수는 기본에서 빠지며, 체크박스로 추가할 수 있습니다. 예를 들어 `stop_target`을 켜면 Stop 노드가 목적지별로 나뉩니다.
+- 하위 모듈의 IVAR(예: `sensor.front`)은 간선 라벨에 `front·left`처럼 줄여서 표시합니다(TRUE인 boolean만, `∅` = 모두 FALSE). 기본으로는 현재 전이에만 표시합니다.
+- 후보 선택 표와 trace 표도 컴포넌트별로 묶여서 표시됩니다.
+
+![컴포넌트별 FSM](docs/components.png)
+
 ### 3. Verifier
 - 모델의 `CTLSPEC` / `LTLSPEC` / `INVARSPEC` 목록과 검사 상태를 보여 줍니다. 개별 검사와 전체 검사를 지원합니다.
 - 식을 직접 입력해 검사할 수 있습니다 (`check_ltlspec -p`, `check_ctlspec -p`, `check_invar -p`).
