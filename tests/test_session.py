@@ -95,3 +95,26 @@ def test_multi_component_inputs_and_stop(s):
     st = s.check()
     assert {p['name']: p['status'] for p in st['props']} == {
         'stop_before_turn': 'True', 'brake_in_stop': 'True', 'resumes': 'False', 'no_idle_turn': 'True'}
+
+
+def test_clocked_components_full_domains_and_counterexample(s):
+    st = s.load(path='clocked_components.smv')
+    assert st['load_ok'], st['load_output']
+    # show_vars -v lists every enum value (plain show_vars abbreviates long domains)
+    types = {v['name']: v['type'] for v in st['vars']}
+    assert types['ctrl.state'] == '{Cruise, Stop, Reverse, TurnLeft, TurnRight, Vacuum, Dock}'
+    st = s.pick_init()
+    st = s.choose() if st['mode'] == 'single' else s.choose(st['candidates'][0]['index'])
+    st = s.simulate(4, random=True)
+    steps = st['trace']['steps']
+    assert [x['state']['positive_edge'] for x in steps] == ['TRUE', 'FALSE', 'TRUE', 'FALSE', 'TRUE']
+    # components change only on transitions that follow a positive edge
+    for a, b in zip(steps, steps[1:]):
+        if a['state']['positive_edge'] == 'FALSE':
+            assert a['state']['ctrl.state'] == b['state']['ctrl.state']
+    st = s.check()
+    assert {p['name']: p['status'] for p in st['props']} == {
+        'hold_between_edges': 'True', 'obstacle_stops': 'True', 'leaves_vacuum': 'False', 'brush_off_in_stop': 'True'}
+    cex = next(p['cex'] for p in st['props'] if p['name'] == 'leaves_vacuum')
+    st = s.view(cex)
+    assert st['trace']['type'] == 'Counterexample' and st['trace']['loops']

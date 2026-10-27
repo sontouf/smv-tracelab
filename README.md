@@ -70,13 +70,26 @@ docker run --rm -p 8780:8780 -v "$PWD:/models" ghcr.io/sontouf/smv-tracelab
 - 기본 추상화는 컴포넌트별 제어 상태 변수입니다(`state`/`mode` 이름의 열거형 → 다른 열거형 → 그 컴포넌트의 VAR 전체 순). 타이머 같은 숫자 변수는 기본에서 빠지며, 체크박스로 추가할 수 있습니다. 예를 들어 `stop_target`을 켜면 Stop 노드가 목적지별로 나뉩니다.
 - 하위 모듈의 IVAR(예: `sensor.front`)은 간선 라벨에 `front·left`처럼 줄여서 표시합니다(TRUE인 boolean만, `∅` = 모두 FALSE). 기본으로는 현재 전이에만 표시합니다.
 - 후보 선택 표와 trace 표도 컴포넌트별로 묶여서 표시됩니다.
+- 열거형 변수 하나로 구분하는 오토마타는 **선언된 모든 상태**를 노드로 그립니다. 아직 방문하지 않은 상태는 점선으로 보입니다.
+- 컴포넌트가 3개면 한 줄에 나란히 놓여 모든 오토마타를 한 화면에서 함께 봅니다.
 
 ![컴포넌트별 FSM](docs/components.png)
+
+#### 클럭(positive edge)으로 동기화된 모델
+`tick`이 매 스텝 바뀌고 `positive_edge := !tick`일 때만 컴포넌트가 갱신되는 모델(`next(x) := enable ? ... : x`)을 위한 보기입니다.
+- 이름이 `positive_edge`/`edge`/`clk`/`clock`/`tick`/`enable`인 boolean 신호를 클럭으로 자동 인식합니다. 툴바의 **클럭(enable)** 에서 직접 고를 수도 있습니다.
+- FSM 위에 **클럭/입력 파형**을 그립니다. `tick`, `positive_edge`와 센서 같은 IVAR가 디지털 파형으로 나오고, 재생 커서가 함께 움직입니다. 클럭 갱신이 일어난 스텝은 음영과 `↑`로 표시됩니다.
+- 각 컴포넌트 제목에 현재 스텝이 `↑ 갱신`인지 `hold`인지 표시합니다.
+- **hold 전이 숨기기**(기본 켬): 클럭이 FALSE라서 상태를 유지하기만 하는 self-loop는 그리지 않습니다. 끄면 점선으로 보입니다.
+- 클럭 신호는 파형으로 보여 주므로 FSM 기본 변수에서는 빠집니다. 예제: `examples/clocked_components.smv`
+
+![클럭 파형과 컴포넌트별 FSM](docs/clocked.png)
 
 ### 3. Verifier
 - 모델의 `CTLSPEC` / `LTLSPEC` / `INVARSPEC` 목록과 검사 상태를 보여 줍니다. 개별 검사와 전체 검사를 지원합니다.
 - 식을 직접 입력해 검사할 수 있습니다 (`check_ltlspec -p`, `check_ctlspec -p`, `check_invar -p`).
-- **반례 재생**: false인 property의 반례 trace를 FSM과 표에서 한 스텝씩 재생합니다. LTL 반례의 loop 시작점(↺)도 표시합니다.
+- 검사 결과는 property마다 **Pass ✓ / Fail ✗** 로 모두 나열되고, Fail에는 그 property의 반례 trace 버튼이 붙습니다.
+- **반례 재생**: false인 property의 반례 trace를 FSM, 클럭 파형, 표에서 한 스텝씩 재생합니다. LTL 반례의 loop 시작점(↺)도 표시합니다. 반례는 NuSMV가 `check_ctlspec`/`check_ltlspec`/`check_invar`로 만든 trace를 `show_traces -v`로 받아 파싱한 것입니다.
 - 반례의 원하는 스텝에서 분기해 **직접 시뮬레이션을 이어갈 수 있습니다** (예: "여기서 다른 입력을 주면 어떻게 될까?").
 
 ### 4. 콘솔
@@ -131,7 +144,7 @@ CI는 Linux/macOS/Windows에서 NuSMV 공식 바이너리를 내려받아 실제
 
 ### English
 
-**SMV TraceLab** drives a real `NuSMV -int` process from your browser: it answers `simulate -i` / `pick_state -i` choice prompts with the state you click, renders traces as a table and as an (optionally abstracted) FSM graph with step-by-step playback, and checks CTL/LTL/INVAR properties, letting you replay counterexamples and branch from any step (`goto_state`) to keep simulating.
+**SMV TraceLab** drives a real `NuSMV -int` process from your browser: it answers `simulate -i` / `pick_state -i` choice prompts with the state you click, renders traces as a table and as an (optionally abstracted) FSM graph with step-by-step playback (one FSM per component, all declared states shown, plus a clock/input waveform for `positive_edge`-gated models), and checks CTL/LTL/INVAR properties, letting you replay counterexamples and branch from any step (`goto_state`) to keep simulating.
 
 ```bash
 uvx --from git+https://github.com/sontouf/smv-tracelab smv-tracelab        # NuSMV is downloaded on first run

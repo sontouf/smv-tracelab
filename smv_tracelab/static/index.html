@@ -120,6 +120,23 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
 .projgrp{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;width:100%;padding:3px 0;border-bottom:1px dashed var(--line)}
 .projgrp>button{font-family:var(--mono);font-weight:600}
 .pane-fsm,.pane-table{margin-bottom:10px}
+/* clock / input waveform */
+#waveWrap{border:1px solid var(--line);border-radius:8px;background:var(--bg);margin-bottom:8px;overflow-x:auto;display:none}
+#waveWrap.on{display:block}
+#waveWrap svg{display:block;cursor:pointer;user-select:none}
+.wavehead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 10px;font:12px var(--mono);color:var(--muted);border-bottom:1px solid var(--line);position:sticky;left:0}
+.wavehead b{color:var(--text)}
+.wavehead .up{color:var(--accent);font-weight:700}
+.wv-name{fill:var(--text);font:11.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.wv-name.i{fill:var(--in-text)}.wv-name.clk{fill:var(--accent);font-weight:700}
+.wv-line{fill:none;stroke:var(--muted);stroke-width:1.6}
+.wv-line.clk{stroke:var(--accent)}.wv-line.i{stroke:var(--in-text)}
+.wv-fill{fill:var(--muted);opacity:.12}.wv-fill.clk{fill:var(--accent);opacity:.16}.wv-fill.i{fill:var(--in-text);opacity:.16}
+.wv-upd{fill:var(--accent);opacity:.07}
+.wv-cur{fill:var(--accent);opacity:.2}
+.wv-tick{fill:var(--muted);font:10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.wv-tick.cur{fill:var(--accent);font-weight:700}
+.wv-grid{stroke:var(--line);stroke-width:1}
 </style>
 <style id="fsmCss">
 .fn rect{fill:var(--panel);stroke:var(--faint);stroke-width:1.2}
@@ -138,6 +155,12 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
 .fe text{fill:var(--muted);font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
 .fe.now text{fill:var(--accent);font-weight:700}
 .fe.future{opacity:.35}
+.fe.hold path{stroke-dasharray:2 3}
+.fn.ghost{opacity:.5}
+.fn.ghost rect{fill:none;stroke-dasharray:3 3}
+.fn.ghost text{fill:var(--muted)}
+.fgedge{fill:var(--accent);font:700 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.fghold{fill:var(--muted);font:600 12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .fgtitle{fill:var(--text);font:700 15px system-ui,-apple-system,"Segoe UI",sans-serif}
 .fgcur{fill:var(--accent);font:600 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .arrow{fill:var(--faint)}.arrow.trav{fill:var(--muted)}.arrow.now{fill:var(--accent)}
@@ -257,6 +280,9 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
           <button class="sm" data-m="comp" title="모듈 인스턴스(컴포넌트)마다 따로 그린 FSM">컴포넌트별 FSM</button>
         </div>
         <label class="check" style="margin:0" title="끄면 현재 전이(파란 간선)에만 입력값을 표시합니다"><input type="checkbox" id="edgeInputs"> 모든 간선에 입력(IVAR) 표시</label>
+        <label class="check" style="margin:0" title="이 신호가 TRUE 인 스텝 다음 전이에서만 컴포넌트가 갱신됩니다 (예: positive_edge)">클럭(enable) <select id="clockSel" style="width:auto;font-size:12px;padding:2px 4px"></select></label>
+        <label class="check" style="margin:0" title="클럭이 FALSE 라서 상태를 유지만 하는 전이(self-loop)를 그리지 않습니다"><input type="checkbox" id="hideHold" checked> hold 전이 숨기기</label>
+        <label class="check" style="margin:0" title="trace 에서 방문하지 않은 상태도 점선 노드로 표시합니다 (열거형 변수 하나로 구분할 때)"><input type="checkbox" id="allStates" checked> 선언된 모든 상태</label>
       </div>
       <details id="projDetails">
         <summary id="projSummary">FSM 상태를 구분할 변수</summary>
@@ -272,8 +298,11 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
         <span><span class="sw" style="border:2.4px solid var(--muted)"></span>초기 상태(→)</span>
         <span>↺ LTL loop 시작</span>
         <span>간선 라벨: 스텝 번호 · 입력(IVAR)</span>
+        <span>┄ 점선 노드: 아직 방문 안 한 상태</span>
+        <span>↑ 클럭 갱신 스텝</span>
         <span>휠: 확대 · 드래그: 이동/노드 이동 · 노드 클릭: 해당 스텝으로</span>
       </div>
+      <div id="waveWrap"></div>
       <div id="fsmWrap">
         <div class="fsmtools">
           <button class="sm" id="fsmFit">맞춤</button>
@@ -386,7 +415,7 @@ function render(){
       : `<span style="color:var(--err)">● 로드 실패</span><div class="srcbox" style="color:var(--err);white-space:pre-wrap">${esc(S.load_output||'')}</div>`;
   }
   $('simTraceNo').textContent = S.sim_trace ? '#'+S.sim_trace : '—';
-  if(!S.model || projModel !== S.model.path){ proj=null; fsmMode=null; projModel = S.model && S.model.path; fsmPos=new Map(); fsmDragged=false; }
+  if(!S.model || projModel !== S.model.path){ proj=null; fsmMode=null; clockSel=null; projModel = S.model && S.model.path; fsmPos=new Map(); fsmDragged=false; }
   renderTraceSel(); renderChoice(); renderVerifier(); renderViewer(); setDisabled();
 }
 
@@ -479,7 +508,7 @@ function renderVerifier(){
     for(const p of S.props){
       const sel=S.trace&&p.cex===S.trace.number;
       h+=`<tr class="${sel?'sel':''}"><td>${p.index}</td><td>${esc(p.name||'—')}</td><td>${esc(p.type)}</td><td class="formula">${esc(p.formula)}</td>
-        <td><span class="badge ${esc(p.status)}">${esc({True:'True ✓',False:'False ✗',Unchecked:'미검사'}[p.status]||p.status)}</span></td>
+        <td><span class="badge ${esc(p.status)}">${esc({True:'Pass ✓',False:'Fail ✗',Unchecked:'미검사'}[p.status]||p.status)}</span></td>
         <td style="white-space:nowrap"><button class="sm btnChk" data-i="${p.index}">검사</button>
         ${p.cex?` <button class="sm primary" data-cex="${p.cex}" title="반례 trace #${p.cex} 를 FSM/표에서 단계별 재생">반례 재생 ▶</button>`:''}</td></tr>`;
     }
@@ -489,18 +518,31 @@ function renderVerifier(){
   }
   const lc=S.last_check, vr=$('verResult');
   if(!lc){ vr.innerHTML=''; return; }
-  let h=`<div class="vresult"><span class="muted mono" style="font-size:12px">${esc(lc.cmd)}</span>`;
-  // property 이름 찾기 (NuSMV 가 출력하는 식과 show_property 의 식은 공백만 다를 수 있다)
-  const norm=t=>t.replace(/\s+/g,'');
-  const nameOf=f=>{ const p=S.props.find(p=>norm(p.formula)===norm(f)); return p&&p.name?p.name:null; };
-  const line=r=>`<div><span class="${r.result==='true'?'t':'f'}">${r.result==='true'?'TRUE':'FALSE'}</span> ${nameOf(r.formula)?`<b class="mono">${esc(nameOf(r.formula))}</b> `:''}<span class="mono">${esc(r.formula)}</span></div>`;
-  if(lc.results.length>3){
-    const nt=lc.results.filter(r=>r.result==='true').length, nf=lc.results.length-nt;
-    h+=`<div>${lc.results.length}개 검사: <span class="t">TRUE ${nt}</span> · <span class="f">FALSE ${nf}</span></div>`;
-    h+=lc.results.filter(r=>r.result!=='true').map(line).join('');
-    h+=`<details><summary>전체 결과 보기</summary>${lc.results.map(line).join('')}</details>`;
-  } else h+=lc.results.map(line).join('');
-  if(lc.new_traces.length) h+=`<div class="mt">반례 trace: ${lc.new_traces.map(n=>`<button class="sm" data-cex="${n}">#${n} 재생 ▶</button>`).join(' ')} <span class="hint">FSM/표에서 단계별로 보고, 원하는 스텝에서 분기해 직접 시뮬레이션할 수 있습니다.</span></div>`;
+  // 결과 줄 ↔ property/반례 trace 연결 (NuSMV 가 출력하는 식과 show_property 의 식은 공백만 다를 수 있다)
+  const norm=t=>t.replace(/[\s()]+/g,'');
+  const propOf=f=>S.props.find(p=>norm(p.formula)===norm(f));
+  const freeTraces=lc.new_traces.filter(n=>!S.props.some(p=>p.cex===n));
+  let fi=0;
+  const rows=lc.results.map(r=>{
+    const p=propOf(r.formula);
+    let cex=null;
+    if(r.result==='false') cex=p&&p.cex?p.cex:(freeTraces[fi++]??null);
+    return {...r,name:p&&p.name,cex};
+  });
+  const nt=rows.filter(r=>r.result==='true').length, nf=rows.length-nt;
+  let h=`<div class="vresult"><div class="toolbar" style="margin-bottom:4px"><span class="muted mono" style="font-size:12px">${esc(lc.cmd)}</span>`+
+    (rows.length?`<span class="grow"></span><span>${rows.length}개 검사: <span class="t">Pass ${nt}</span> · <span class="f">Fail ${nf}</span></span>`:'')+'</div>';
+  if(rows.length){
+    h+='<div class="tablewrap" style="max-height:32vh"><table class="props"><tbody>';
+    for(const r of rows){
+      const sel=S.trace&&r.cex===S.trace.number;
+      h+=`<tr class="${sel?'sel':''}"><td><span class="badge ${r.result==='true'?'True':'False'}">${r.result==='true'?'Pass ✓':'Fail ✗'}</span></td>
+        <td class="mono">${esc(r.name||'—')}</td><td class="formula mono">${esc(r.formula)}</td>
+        <td style="white-space:nowrap">${r.cex?`<button class="sm primary" data-cex="${r.cex}" title="반례 trace #${r.cex} 를 FSM·파형·표에서 단계별 재생">반례 #${r.cex} 재생 ▶</button>`:r.result==='false'?'<span class="hint">반례 없음</span>':''}</td></tr>`;
+    }
+    h+='</tbody></table></div>';
+    if(nf) h+='<div class="hint mt">반례는 실제 NuSMV 가 만든 trace 를 파싱한 것입니다. 재생 중 원하는 스텝에서 "이 스텝에서 분기"로 직접 시뮬레이션을 이어갈 수 있습니다.</div>';
+  }
   if(lc.error) h+=`<pre>${esc(lc.error)}</pre>`;
   vr.innerHTML=h+'</div>';
   vr.querySelectorAll('[data-cex]').forEach(b=>b.onclick=()=>playTrace(+b.dataset.cex));
@@ -546,7 +588,7 @@ function renderViewer(){
   cursor=Math.min(cursor,Math.max(0,cols.length-1));
   const r=$('pRange'); r.max=Math.max(0,cols.length-1); r.value=cursor;
   $('pPos').textContent=cols.length?`${cols[cursor].label}  (${cursor+1}/${cols.length})`:'—';
-  if(viewMode!=='table') renderFsm(cols);
+  if(viewMode!=='table'){ renderClockSel(cols); renderWave(cols); renderFsm(cols); }
   if(viewMode!=='fsm') renderTable(cols);
   setDisabled();
 }
@@ -619,7 +661,10 @@ function stateNames(cols){ const a=new Set(); cols.forEach(c=>Object.keys(c.stat
 function componentsOf(names){ const seen=[]; names.forEach(n=>{ const c=compOf(n); if(!seen.includes(c)) seen.push(c); }); return seen; }
 function defaultProj(cols,mode){
   // 기본 추상화: 열거형(제어 상태) 변수만. 타이머 같은 숫자 변수는 제외.
-  const st=stateNames(cols).filter(n=>varKind(n)==='s'), sym=st.filter(isSymbolic);
+  let st=stateNames(cols).filter(n=>varKind(n)==='s');
+  // 클럭 같은 신호(tick 등)는 파형으로 보여 주므로 FSM 기본 변수에서 뺀다
+  if(clockOf(cols)){ const rest=st.filter(n=>!(CLK_RX.test(n.split('.').pop())&&isBoolSig(cols,n))); if(rest.length) st=rest; }
+  const sym=st.filter(isSymbolic);
   if(!sym.length) return st;
   if(mode!=='comp') return sym;
   // 컴포넌트마다: 이름에 state/mode 가 들어간 열거형 > 열거형 전체 > (열거형이 없으면) VAR 전체
@@ -656,6 +701,66 @@ function renderProjBox(cols){
   });
 }
 
+/* ---------- clock (positive edge) ---------- */
+let clockSel=null;   // null = 자동 감지, '' = 클럭 없음
+const CLK_RX=/pos(itive)?_?edge|rising|clk|clock|tick|enable/i;
+function isBoolSig(cols,n){ return cols.length>0&&cols.every(c=>{ const v=val(c,n); return v===undefined||v==='TRUE'||v==='FALSE'; }); }
+function clockCandidates(cols){ return stateNames(cols).filter(n=>isBoolSig(cols,n)); }
+function clockOf(cols){
+  if(clockSel!==null) return clockSel&&stateNames(cols).includes(clockSel)?clockSel:'';
+  const c=clockCandidates(cols).filter(n=>CLK_RX.test(n.split('.').pop()));
+  return c.find(n=>/edge|rising/i.test(n))||c.find(n=>varKind(n)==='d')||c[0]||'';
+}
+// 스텝 i 로 들어오는 전이가 클럭 갱신인가: 직전 스텝에서 enable(클럭) 신호가 TRUE
+const enabledAt=(cols,clk,i)=>!clk||(i>0&&cols[i-1].state[clk]==='TRUE');
+function renderClockSel(cols){
+  const sel=$('clockSel'), cands=clockCandidates(cols), clk=clockOf(cols);
+  const sig=cands.join(',')+'|'+clk+'|'+clockSel;
+  if(sel.dataset.sig===sig) return; sel.dataset.sig=sig;
+  sel.innerHTML=`<option value="__auto">자동${clockSel===null?` (${clk||'없음'})`:''}</option><option value="" ${clockSel===''?'selected':''}>없음</option>`+
+    cands.map(n=>`<option ${clockSel===n?'selected':''}>${esc(n)}</option>`).join('');
+  if(clockSel===null) sel.value='__auto';
+}
+function renderWave(cols){
+  const wrap=$('waveWrap'), clk=cols.length?clockOf(cols):'';
+  const lanes=cols.length?clockCandidates(cols).filter(n=>n===clk||CLK_RX.test(n.split('.').pop())).concat(S.input_vars.filter(n=>isBoolSig(cols,n))):[];
+  if(!lanes.length){ wrap.classList.remove('on'); wrap.innerHTML=''; return; }
+  wrap.classList.add('on');
+  const n=cols.length, labW=Math.min(190,Math.max(...lanes.map(l=>l.length))*7+18), laneH=20, top=16;
+  const avail=Math.max(200,wrap.clientWidth-labW-12), stepW=Math.max(16,Math.min(44,avail/n));
+  const W=labW+n*stepW+8, H=top+lanes.length*laneH+6;
+  const X=i=>labW+i*stepW;
+  let h=`<svg width="${W}" height="${H}">`;
+  for(let i=0;i<n;i++){
+    if(clk&&enabledAt(cols,clk,i)) h+=`<rect class="wv-upd" x="${X(i)}" y="0" width="${stepW}" height="${H}"/>`;
+    if(i===cursor) h+=`<rect class="wv-cur" x="${X(i)}" y="0" width="${stepW}" height="${H}"/>`;
+    const lab=cols[i].label.split('.').pop(), every=Math.ceil(26/stepW);
+    if(i===cursor||i%every===0) h+=`<text class="wv-tick ${i===cursor?'cur':''}" x="${X(i)+stepW/2}" y="11" text-anchor="middle">${clk&&enabledAt(cols,clk,i)?'↑':''}${esc(lab)}</text>`;
+  }
+  lanes.forEach((ln,li)=>{
+    const y0=top+li*laneH, hi=y0+4, lo=y0+laneH-3, k=ln===clk||CLK_RX.test(ln.split('.').pop())&&varKind(ln)!=='i'?'clk':varKind(ln)==='i'?'i':'';
+    h+=`<line class="wv-grid" x1="0" x2="${W}" y1="${y0+laneH}" y2="${y0+laneH}"/>`;
+    h+=`<text class="wv-name ${k}" x="6" y="${y0+14}">${esc(ln)}${ln===clk?' ⏵':''}</text>`;
+    let d='', fill='';
+    for(let i=0;i<n;i++){
+      const v=val(cols[i],ln), y=v==='TRUE'?hi:lo, x=X(i);
+      if(v===undefined) continue;
+      d+=(d?`L${x},${y}`:`M${x},${y}`)+`L${x+stepW},${y}`;
+      if(v==='TRUE') fill+=`<rect class="wv-fill ${k}" x="${x}" y="${hi}" width="${stepW}" height="${lo-hi}"/>`;
+    }
+    h+=fill+`<path class="wv-line ${k}" d="${d}"/>`;
+  });
+  h+='</svg>';
+  const c=cols[cursor], up=clk&&c&&enabledAt(cols,clk,cursor), nextUp=clk&&c&&c.state[clk]==='TRUE';
+  const head=`<div class="wavehead"><b>클럭/입력 파형</b>${clk?`<span>enable = <b>${esc(clk)}</b></span>
+    <span>${c?`스텝 ${esc(c.label)}: `:''}${up?'<span class="up">↑ 이 스텝에서 컴포넌트 갱신</span>':'상태 유지 (hold)'}${nextUp?' · 다음 전이에서 갱신':''}</span>`:'<span>클럭 신호 없음 — 매 스텝 갱신</span>'}
+    <span class="hint">음영: 갱신 스텝 · 클릭: 해당 스텝으로</span></div>`;
+  const sl=wrap.scrollLeft; wrap.innerHTML=head+h;
+  wrap.scrollLeft=sl;
+  const cx=X(cursor); if(cx<sl+labW||cx>sl+wrap.clientWidth-40) wrap.scrollLeft=Math.max(0,cx-wrap.clientWidth/2);
+  wrap.querySelector('svg').onclick=ev=>{ const r=ev.currentTarget.getBoundingClientRect(), i=Math.floor((ev.clientX-r.left-labW)/stepW); if(i>=0&&i<n){ stopPlay(); setCursor(i); } };
+}
+
 function inputLabel(inp){
   // boolean 입력은 TRUE 인 것만 짧은 이름으로 (front·left), 모두 FALSE 면 ∅
   const ks=S.input_vars.filter(v=>v in inp); if(!ks.length) return '';
@@ -664,21 +769,35 @@ function inputLabel(inp){
   return parts.length?parts.join('·'):'∅';
 }
 
-function buildGraph(cols,P,gid){
+function domainOf(n){
+  const t=varType(n);
+  if(t==='boolean') return ['FALSE','TRUE'];
+  if(t.startsWith('{')&&t.endsWith('}')) return t.slice(1,-1).split(',').map(x=>x.trim()).filter(Boolean);
+  return null;
+}
+function buildGraph(cols,P,gid,clk){
   const nodes=new Map(), edges=new Map(), order=[];
+  const hideHold=$('hideHold').checked;
   const keyOf=c=>gid+'\u0004'+P.map(n=>c.state[n]).join('\u0001');
   let prev=null;
   cols.forEach((c,i)=>{
     const k=keyOf(c);
     if(!nodes.has(k)){ const nd={key:k,vals:Object.fromEntries(P.map(n=>[n,c.state[n]])),first:i,visits:[],pend:c.pend,loop:false}; nodes.set(k,nd); order.push(nd); }
     const nd=nodes.get(k); nd.visits.push(i); if(!c.pend) nd.pend=false; if(c.loop) nd.loop=true;
-    if(prev!==null){
+    const en=enabledAt(cols,clk,i);
+    if(prev!==null&&!(clk&&!en&&hideHold&&prev===k)){
       const ek=prev+'\u0002'+k;
-      if(!edges.has(ek)) edges.set(ek,{from:prev,to:k,inputs:new Set(),steps:[],pend:true});
-      const e=edges.get(ek), inp=inputLabel(c.input); e.steps.push(i); if(inp) e.inputs.add(inp); if(!c.pend) e.pend=false;
+      if(!edges.has(ek)) edges.set(ek,{from:prev,to:k,inputs:new Set(),steps:[],pend:true,hold:true});
+      const e=edges.get(ek), inp=inputLabel(c.input); e.steps.push(i); if(inp) e.inputs.add(inp); if(!c.pend) e.pend=false; if(en) e.hold=false;
     }
     prev=k;
   });
+  // 방문하지 않은 선언 상태도 점선 노드로 (변수 하나로 구분하는 오토마타일 때)
+  const dom=P.length===1&&$('allStates').checked?domainOf(P[0]):null;
+  if(dom&&dom.length<=24) for(const v of dom){
+    const k=gid+'\u0004'+v;
+    if(!nodes.has(k)){ const nd={key:k,vals:{[P[0]]:v},first:Infinity,visits:[],pend:false,loop:false,ghost:true}; nodes.set(k,nd); order.push(nd); }
+  }
   // 노드 라벨: 노드들 사이에서 값이 달라지는 투영 변수만 (고정 값은 하단 정보줄에)
   const varying=P.filter(n=>new Set(order.map(nd=>nd.vals[n])).size>1);
   const fixed=P.filter(n=>!varying.includes(n));
@@ -742,7 +861,8 @@ function renderFsm(cols){
   const mode=fsmModeOf(cols), P=effectiveProj(cols);
   if(!P.length){ svg.innerHTML=''; $('fsmInfo').textContent='FSM 상태를 구분할 변수를 하나 이상 선택하세요.'; return; }
   const groups=mode==='comp'?componentsOf(P).map(c=>({name:c,P:P.filter(n=>compOf(n)===c)})):[{name:'',P}];
-  const Gs=groups.map(g=>buildGraph(cols,g.P,g.name));
+  const clk=clockOf(cols);
+  const Gs=groups.map(g=>buildGraph(cols,g.P,g.name,clk));
   const total=Gs.reduce((a,G)=>a+G.order.length,0);
   if(total>600){ svg.innerHTML=''; $('fsmInfo').textContent=`노드가 ${total}개로 너무 많습니다. 위에서 FSM 변수 수를 줄여 추상화하세요.`; return; }
   const showIn=$('edgeInputs').checked;
@@ -753,13 +873,13 @@ function renderFsm(cols){
     G.order.forEach(n=>{ n.lines=nodeLabel(n,G.varying,G.name); n.w=Math.max(54,Math.max(...n.lines.map(s=>String(s).length))*7.4+22); n.h=n.lines.length*15+14; });
   });
   const allNodes=Gs.flatMap(G=>G.order);
-  $('fsmWrap').style.height=mode==='comp'&&Gs.length>1?'640px':'';
-  const sig=(S.trace?S.trace.number:'')+'|'+mode+'|'+P.join(',')+'|'+allNodes.map(n=>n.key).join('\u0003')+'|'+showIn;
+  $('fsmWrap').style.height=mode==='comp'&&Gs.length>1?(Gs.length<=3?'500px':'620px'):'';
+  const sig=(S.trace?S.trace.number:'')+'|'+mode+'|'+P.join(',')+'|'+allNodes.map(n=>n.key).join('\u0003')+'|'+showIn+'|'+clk+$('hideHold').checked;
   if(sig!==fsmSig||allNodes.some(n=>!fsmPos.has(n.key))){
     // 컴포넌트 그래프를 위에서 아래로 쌓는다. 사용자가 노드를 옮겼다면 기존 위치는 유지.
     // 컴포넌트 그래프는 격자(2~3열)로 배치한다. 사용자가 노드를 옮겼다면 기존 위치는 유지.
     if(!fsmDragged) fsmPos=new Map();
-    const ncol=Gs.length<=1?1:Gs.length<=4?2:3, gapX=160, gapY=170;
+    const ncol=Gs.length<=1?1:Gs.length===4?2:Math.min(3,Gs.length), gapX=160, gapY=170;
     const boxes=Gs.map(G=>{
       if(mode==='comp'&&G.order.length<=14) circleLayout(G); else layoutGraph(G);
       const x0=Math.min(...G.order.map(n=>n.x-n.w/2)), x1=Math.max(...G.order.map(n=>n.x+n.w/2));
@@ -786,13 +906,14 @@ function renderFsm(cols){
     if(mode==='comp'){
       const x0=Math.min(...G.order.map(n=>n.x-n.w/2)), y0=Math.min(...G.order.map(n=>n.y-n.h/2));
       const cur=G.order.find(n=>n.key===curKey);
-      h+=`<text class="fgtitle" x="${x0-40}" y="${y0-58}">${esc(G.name)}${cur?` <tspan class="fgcur">= ${esc(nodeLabel(cur,G.varying,G.name).join(', '))}</tspan>`:''}</text>`;
+      const upd=clk?(enabledAt(cols,clk,cursor)?' <tspan class="fgedge">↑ 갱신</tspan>':' <tspan class="fghold">hold</tspan>'):'';
+      h+=`<text class="fgtitle" x="${x0-40}" y="${y0-58}">${esc(G.name)}${cur?` <tspan class="fgcur">= ${esc(nodeLabel(cur,G.varying,G.name).join(', '))}</tspan>`:''}${upd}</text>`;
     }
     const pair=new Set(G.edges.map(e=>e.from+'\u0002'+e.to)), multi=new Map();
     for(const e of G.edges){
       const a=nodeBy.get(e.from), b=nodeBy.get(e.to);
       const trav=e.steps.some(s=>s<=cursor), now=e.steps.includes(cursor);
-      const cls=`fe ${now?'now':trav?'trav':'future'} ${e.pend?'pend':''}`, mk=now?'arnow':trav?'artrav':'ar';
+      const cls=`fe ${now?'now':trav?'trav':'future'} ${e.pend?'pend':''} ${clk&&e.hold?'hold':''}`, mk=now?'arnow':trav?'artrav':'ar';
       let d, lx, ly;
       if(e.from===e.to){
         const k=(multi.get(e.from+'self')||0); multi.set(e.from+'self',k+1);
@@ -814,8 +935,8 @@ function renderFsm(cols){
     h+=`<path class="initarrow" d="M${n0.x-n0.w/2-34},${n0.y} L${n0.x-n0.w/2-4},${n0.y}" marker-end="url(#artrav)"/>`;
     for(const n of G.order){
       const visited=n.visits.some(v=>v<=cursor);
-      const cls=`fn ${n.key===curKey?'cur':visited?'visited':'future'} ${n===n0?'init':''} ${n.pend?'pend':''}`;
-      const title=Object.entries(n.vals).map(([k,v])=>`${k} = ${v}`).join('\n')+`\n\n방문 스텝: ${n.visits.map(i=>cols[i].label).join(', ')}`;
+      const cls=`fn ${n.ghost?'ghost':n.key===curKey?'cur':visited?'visited':'future'} ${n===n0?'init':''} ${n.pend?'pend':''}`;
+      const title=Object.entries(n.vals).map(([k,v])=>`${k} = ${v}`).join('\n')+(n.ghost?'\n\n이 trace 에서 방문하지 않은 상태':`\n\n방문 스텝: ${n.visits.map(i=>cols[i].label).join(', ')}`);
       h+=`<g class="${cls}" data-k="${esc(n.key)}" transform="translate(${n.x},${n.y})"><title>${esc(title)}</title><rect x="${-n.w/2}" y="${-n.h/2}" width="${n.w}" height="${n.h}" rx="8"/>`;
       n.lines.forEach((t,i)=>{ h+=`<text text-anchor="middle" x="0" y="${-n.h/2+19+i*15}">${esc(t)}</text>`; });
       if(n.loop) h+=`<text class="badge-loop" x="${n.w/2-4}" y="${-n.h/2-4}" text-anchor="end">↺ loop</text>`;
@@ -826,7 +947,7 @@ function renderFsm(cols){
   const edgesN=Gs.reduce((a,G)=>a+G.edges.length,0);
   const fixed=mode==='single'?Gs[0].fixed:[];
   const fixedTxt=fixed.length?` · 고정: ${fixed.slice(0,4).map(n=>n+'='+Gs[0].order[0].vals[n]).join(', ')}${fixed.length>4?' …':''}`:'';
-  $('fsmInfo').textContent=`${mode==='comp'?`컴포넌트 ${Gs.length} · `:''}노드 ${total} · 간선 ${edgesN} · 스텝 ${cols.length}${fixedTxt}${S.input_vars.length?' · 입력: TRUE 인 boolean 만 표시, ∅ = 모두 FALSE':''}`;
+  $('fsmInfo').textContent=`${mode==='comp'?`컴포넌트 ${Gs.length} · `:''}${clk?`클럭 ${clk} · `:''}노드 ${total} · 간선 ${edgesN} · 스텝 ${cols.length}${fixedTxt}${S.input_vars.length?' · 입력: TRUE 인 boolean 만 표시, ∅ = 모두 FALSE':''}`;
   if(!fsmView||relayoutNeeded) fitFsm(); else applyView();
   // 현재 노드가 화면 밖이면 전체 맞춤 (시뮬레이션으로 노드가 늘어날 때 따라가기)
   const wrap=$('fsmWrap');
@@ -861,7 +982,7 @@ function bindFsm(nodes,cols){
       const mv=e=>{ const dx=(e.clientX-sx)/fsmView.s, dy=(e.clientY-sy)/fsmView.s; if(Math.abs(dx)+Math.abs(dy)>3) moved=true; if(moved){ fsmPos.set(k,{x:ox+dx,y:oy+dy}); g.setAttribute('transform',`translate(${ox+dx},${oy+dy})`); } };
       const up=()=>{ g.removeEventListener('pointermove',mv); g.removeEventListener('pointerup',up);
         if(moved){ fsmDragged=true; renderFsm(cols); }
-        else{ const nd=byKey.get(k); const nx=nd.visits.find(v=>v>cursor); setCursor(nx!==undefined?nx:nd.visits[0]); } };
+        else{ const nd=byKey.get(k); if(!nd.visits.length) return; const nx=nd.visits.find(v=>v>cursor); setCursor(nx!==undefined?nx:nd.visits[0]); } };
       g.addEventListener('pointermove',mv); g.addEventListener('pointerup',up);
     });
   });
@@ -951,6 +1072,9 @@ $('projAllVars').onclick=()=>{ proj=stateNames(traceColumns()).filter(n=>varKind
 $('projNone').onclick=()=>{ proj=[]; resetFsm(); };
 document.querySelectorAll('#fsmModeSeg button').forEach(b=>b.onclick=()=>{ fsmMode=b.dataset.m; resetFsm(); });
 $('edgeInputs').onchange=resetFsm;
+$('hideHold').onchange=resetFsm;
+$('allStates').onchange=resetFsm;
+$('clockSel').onchange=e=>{ clockSel=e.target.value==='__auto'?null:e.target.value; proj=null; resetFsm(); };
 ['varFilter','showDefines','onlyChanged'].forEach(id=>$(id).addEventListener('input',()=>S&&renderTable(traceColumns())));
 $('btnCsv').onclick=exportCsv;
 $('btnClearCon').onclick=()=>{ $('console').innerHTML=''; };
@@ -962,7 +1086,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft'){ stopPlay(); setCursor(cursor-1); e.preventDefault(); }
   if(e.key===' '){ playing?stopPlay():startPlay(); e.preventDefault(); }
 });
-window.addEventListener('resize',()=>{ if(viewMode!=='table') fitFsm(); });
+window.addEventListener('resize',()=>{ if(viewMode!=='table'&&S){ renderWave(traceColumns()); fitFsm(); } });
 
 (async()=>{
   await loadModels();

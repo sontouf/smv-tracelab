@@ -188,7 +188,7 @@ class Session:
         err = re.search(r'(?im)^.*(error|cannot|undefined|not found|syntax|illegal).*$', out)
         self.load_ok = self.mode == 'idle' and not err
         if self.mode == 'idle':
-            self.vars = parse_vars(self._send('show_vars', log=False))
+            self.vars = parse_vars(self._send('show_vars -v', log=False))
             self.input_vars = [v['name'] for v in parse_vars(self._send('show_vars -i', log=False))]
             self._refresh_props()
         return self.state()

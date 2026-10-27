@@ -1,0 +1,57 @@
+-- Clocked multi-component model: a free-running tick drives positive_edge, and every
+-- component updates only on that edge (otherwise it holds its value).
+MODULE main
+VAR
+  tick   : boolean;
+  sensor : Sensor;
+  ctrl   : Controller(positive_edge, sensor.obstacle, sensor.dirt);
+  brush  : Brush(positive_edge, ctrl.next_state);
+DEFINE
+  positive_edge := !tick;
+ASSIGN
+  init(tick) := FALSE;
+  next(tick) := !tick;
+
+-- Components hold their state between edges.
+LTLSPEC NAME hold_between_edges := G (!positive_edge & ctrl.state = Cruise -> X ctrl.state = Cruise)
+-- An obstacle seen on an edge while cruising always leads to Stop.
+LTLSPEC NAME obstacle_stops     := G (positive_edge & ctrl.state = Cruise & sensor.obstacle -> X ctrl.state = Stop)
+-- False: dirt can keep the robot in Vacuum forever.
+CTLSPEC NAME leaves_vacuum      := AG (ctrl.state = Vacuum -> AF ctrl.state != Vacuum)
+INVARSPEC NAME brush_off_in_stop := ctrl.state = Stop -> brush.mode != high
+
+MODULE Sensor
+IVAR
+  obstacle : boolean;
+  dirt     : boolean;
+
+MODULE Controller(enable, obstacle, dirt)
+VAR
+  state : {Cruise, Stop, Reverse, TurnLeft, TurnRight, Vacuum, Dock};
+DEFINE
+  next_state :=
+    case
+      state = Cruise & obstacle : Stop;
+      state = Cruise & dirt     : Vacuum;
+      state = Stop & obstacle   : Reverse;
+      state = Stop              : TurnLeft;
+      state = Reverse           : Stop;
+      state = TurnLeft          : Cruise;
+      state = Vacuum & !dirt    : Cruise;
+      TRUE                      : state;
+    esac;
+ASSIGN
+  init(state) := Stop;
+  next(state) := enable ? next_state : state;
+
+MODULE Brush(enable, target)
+VAR
+  mode : {off, normal, high};
+ASSIGN
+  init(mode) := off;
+  next(mode) := !enable ? mode :
+                case
+                  target = Vacuum : high;
+                  target = Cruise : normal;
+                  TRUE            : off;
+                esac;
