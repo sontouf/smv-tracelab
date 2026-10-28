@@ -21,6 +21,8 @@ def make_handler(session):
         '/api/check': lambda b: s.check(b.get('index')),
         '/api/check_formula': lambda b: s.check_formula(b.get('kind'), b.get('formula')),
         '/api/command': lambda b: s.raw(b.get('cmd', '')),
+        '/api/grid/start': lambda b: s.grid_start(b),
+        '/api/grid/stop': lambda b: s.grid_cancel(),
     }
 
     class Handler(BaseHTTPRequestHandler):
@@ -46,8 +48,10 @@ def make_handler(session):
             elif u.path == '/api/state':
                 self._json(s.poll())
             elif u.path == '/api/log':
-                start = int(q.get('from', 0) or 0)
-                self._json({'items': s.log[start:], 'len': len(s.log)})
+                start = max(0, int(q.get('from', 0) or 0) - s.log_base)
+                self._json({'items': s.log[start:], 'len': s.log_base + len(s.log)})
+            elif u.path == '/api/grid':
+                self._json(s.grid_result())
             elif u.path == '/api/models':
                 self._json({'root': str(s.root), 'models': s.list_models()})
             elif u.path == '/api/source':
@@ -67,6 +71,8 @@ def make_handler(session):
             except ValueError:
                 body = {}
             try:
+                if s.grid_running and fn is not post_routes['/api/grid/stop']:
+                    raise RuntimeError('그리드 시뮬레이션이 실행 중입니다. 끝나거나 중지한 뒤에 다시 시도하세요.')
                 self._json(fn(body))
             except Exception as e:  # report every failure to the UI instead of dropping the request
                 with s.lock:

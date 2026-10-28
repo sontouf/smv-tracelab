@@ -8,8 +8,9 @@ import time
 from pathlib import Path
 
 from . import proc
+from .grid import SENSORS, GridError, World, replay
 from .nusmv_bin import LIB_HINT, runtime_env
-from .parsing import (clean, parse_candidates, parse_check_results, parse_properties, parse_trace,
+from .parsing import (VAR_LINE, clean, parse_candidates, parse_check_results, parse_properties, parse_trace,
                       parse_trace_count, parse_vars)
 
 # Prompts on which NuSMV waits for stdin, matched at the end of the output buffer.
@@ -49,15 +50,17 @@ class Session:
         self.view_trace = None  # trace shown in the viewer
         self.pending, self.run = [], None
         self.props, self.last_check = [], None
-        self.log = []
+        self.log, self.log_base = [], 0   # log_base = entries dropped from the front (indices stay absolute)
+        self.grid, self.grid_stop = None, False
         self.tmpdir = Path(tempfile.mkdtemp(prefix='smv_tracelab_'))
 
     # ------------------------------------------------------------------ process io
     def _log(self, kind, text):
         if text:
             self.log.append({'kind': kind, 'text': text})
-            if len(self.log) > 5000:
-                del self.log[:1000]
+            if len(self.log) > 20000:
+                del self.log[:5000]
+                self.log_base += 5000
 
     def _wait(self, timeout, echo=None):
         end = time.time() + timeout
@@ -171,6 +174,7 @@ class Session:
         self.traces, self.trace_count, self.sim_trace, self.view_trace = {}, 0, None, None
         self.candidates, self.pending, self.run, self.vars, self.input_vars = [], [], None, [], []
         self.props, self.last_check = [], None
+        self.grid = None
         self._log('info', '=== %s -int %s ===' % (self.nusmv, path))
         self.p = proc.spawn([self.nusmv, '-int', path.name], cwd=str(path.parent), env=self.env)
         self.buf, self.mode = '', 'busy'
@@ -324,6 +328,98 @@ class Session:
             self.view_trace = new[-1]
         return self.state()
 
+    # ------------------------------------------------------------------ grid map
+    @property
+    def grid_running(self):
+        return bool(self.grid and self.grid['status'] == 'running')
+
+    def grid_start(self, cfg):
+        """Closed loop on a grid map: sensors from the robot's pose -> `simulate -c` -> motor/cleaner move it."""
+        with self.lock:
+            self._require('idle')
+            if not self.load_ok:
+                raise NuSMVError('모델이 정상적으로 로드되지 않았습니다.')
+            if self.grid_running:
+                raise NuSMVError('그리드 시뮬레이션이 이미 실행 중입니다.')
+            args = {'obstacles': cfg.get('obstacles'), 'dust': cfg.get('dust'),
+                    'start': cfg.get('start') or (0, 0), 'heading': cfg.get('heading') or 'E',
+                    'mapping': cfg.get('mapping')}
+            try:
+                w = World(**args)
+            except GridError as e:
+                raise NuSMVError(str(e))
+            names = {v['name'] for v in self.vars} | set(self.input_vars)
+            missing = sorted({v for k, v in w.m.items() if k in SENSORS + ('tick', 'motor', 'clean') and v and v not in names})
+            if missing:
+                raise NuSMVError('모델에 없는 변수입니다 (변수 매핑을 확인하세요): ' + ', '.join(missing))
+            steps = max(1, min(int(cfg.get('steps') or 1), 5000))
+            self.grid = {'id': (self.grid['id'] + 1) if self.grid else 1, 'status': 'running', 'done': 0,
+                         'total': steps, 'args': args, 'error': None, 'trace': None, 'frames': None,
+                         'pose': w.snapshot()}
+            self.grid_stop = False
+            threading.Thread(target=self._grid_run, args=(self.grid, w, steps), daemon=True).start()
+            return self.state()
+
+    def grid_cancel(self):
+        self.grid_stop = True
+        return self.poll()
+
+    def _current_state(self, log=False):
+        out = self._send('print_current_state -v', log=log)
+        st = {}
+        for line in out.split('\n'):
+            m = VAR_LINE.match(line)
+            if m:
+                st[m.group(1)] = m.group(2)
+        return st
+
+    def _grid_run(self, g, w, steps):
+        tick, status = (False if w.m['tick'] else None), 'done'
+        try:
+            with self.lock:
+                self._log('info', '=== 그리드 시뮬레이션: %d 스텝, 시작 (%d,%d) %s ===' % (steps, *w.pos, w.heading))
+                # Input variables have no value in the initial state, so only state variables are fixed there.
+                c = w.constraint(tick, skip=set(self.input_vars))
+                out = self._send('pick_state -r' + (' -c "%s"' % c if c else ''))
+                new = self._after_output(out)
+                if self.mode != 'idle' or not new:
+                    raise NuSMVError('초기 상태를 만들 수 없습니다 (제약: %s)' % c)
+                self.sim_trace = self.view_trace = new[-1]
+                state = self._current_state(log=True)
+            for i in range(steps):
+                if self.grid_stop:
+                    status = 'stopped'
+                    break
+                with self.lock:
+                    w.act(state)
+                    if tick is not None:
+                        tick = not tick
+                    cmd = 'simulate -r -k 1 -c "%s"' % w.constraint(tick)
+                    out = self._send(cmd)
+                    if 'No future state exists' in out or self.mode != 'idle':
+                        status = 'deadlock'
+                        g['error'] = '스텝 %d: 다음 상태가 존재하지 않습니다 (제약: %s)' % (i + 1, w.constraint(tick))
+                        self._log('err', g['error'])
+                        if self.mode != 'idle':
+                            self._wait(5)
+                        break
+                    state = self._current_state(log=True)
+                    g['done'], g['pose'] = i + 1, w.snapshot()
+        except Exception as e:  # surface every failure in the UI
+            status, g['error'] = 'error', str(e)
+            self._log('err', str(e))
+        with self.lock:
+            if self.mode == 'idle' and self.sim_trace:
+                tr = self._fetch_trace(self.sim_trace)
+                if tr:
+                    g['trace'], self.view_trace = tr['number'], tr['number']
+                    g['frames'] = replay(g['args'], tr['steps'])
+            g['status'] = status  # last: the UI fetches the frames once the run is no longer 'running'
+            self._log('info', '=== 그리드 시뮬레이션 종료 (%s): %d/%d 스텝 ===' % (status, g['done'], g['total']))
+
+    def grid_result(self):
+        return self.grid or {}
+
     # ------------------------------------------------------------------ misc
     def raw(self, line):
         with self.lock:
@@ -359,7 +455,8 @@ class Session:
             'traces': [{'number': n, 'description': t['description'], 'type': t['type'], 'length': len(t['steps'])}
                        for n, t in sorted(self.traces.items())],
             'props': self.props, 'last_check': self.last_check,
-            'log_len': len(self.log),
+            'log_len': self.log_base + len(self.log),
+            'grid': {k: v for k, v in self.grid.items() if k not in ('frames', 'args')} if self.grid else None,
         }
 
     def list_models(self):

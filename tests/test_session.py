@@ -118,3 +118,21 @@ def test_clocked_components_full_domains_and_counterexample(s):
     cex = next(p['cex'] for p in st['props'] if p['name'] == 'leaves_vacuum')
     st = s.view(cex)
     assert st['trace']['type'] == 'Counterexample' and st['trace']['loops']
+
+
+def test_grid_closed_loop(s):
+    import time
+    st = s.load(path='grid_vacuum.smv')
+    assert st['load_ok'], st['load_output']
+    s.grid_start({'obstacles': [[3, 0], [2, 2]], 'dust': [[1, 0], [0, 5]], 'heading': 'E', 'steps': 60})
+    end = time.time() + 60
+    while s.grid_running and time.time() < end:
+        time.sleep(0.05)
+    g = s.grid_result()
+    assert g['status'] == 'done', g['error']
+    fr = g['frames']
+    assert len(fr) == 61 and g['trace'] == s.sim_trace
+    assert [f['tick'] for f in fr[:4]] == ['FALSE', 'TRUE', 'FALSE', 'TRUE']
+    assert not any(f['mismatch'] for f in fr)
+    assert fr[-1]['dust_left'] < 2                        # (1,0) is right in front of the start
+    assert any(f['event'].get('removed') == [1, 0] for f in fr)

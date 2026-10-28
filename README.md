@@ -92,7 +92,18 @@ docker run --rm -p 8780:8780 -v "$PWD:/models" ghcr.io/sontouf/smv-tracelab
 - **반례 재생**: false인 property의 반례 trace를 FSM, 클럭 파형, 표에서 한 스텝씩 재생합니다. LTL 반례의 loop 시작점(↺)도 표시합니다. 반례는 NuSMV가 `check_ctlspec`/`check_ltlspec`/`check_invar`로 만든 trace를 `show_traces -v`로 받아 파싱한 것입니다.
 - 반례의 원하는 스텝에서 분기해 **직접 시뮬레이션을 이어갈 수 있습니다** (예: "여기서 다른 입력을 주면 어떻게 될까?").
 
-### 4. 콘솔
+### 4. 그리드 맵 (로봇 청소기 폐루프 시뮬레이션)
+**그리드 맵** 탭은 10×10 맵 위에서 로봇 청소기 모델을 NuSMV와 맞물려 돌립니다 (`examples/grid_vacuum.smv`).
+- 맵: 시드로 장애물 20개와 먼지 5개를 무작위 배치합니다 (서로 겹치지 않고, 먼지는 (0,0)에서 도달 가능한 칸). 맵 바깥은 모두 벽이며, 셀을 클릭해 장애물/먼지를 직접 바꿀 수도 있습니다. 좌표는 (0,0)이 왼쪽 아래이고 y가 위로 증가합니다.
+- 실행: 로봇은 (0,0)에서 출발합니다. 매 스텝마다 로봇 위치에서 `front`/`left`/`right`(막힘)와 `dust`(현재 칸의 먼지)를 계산해 `simulate -r -k 1 -c "tick = … & sensor.front = … "`로 넘기고, 도달한 상태의 `motor`/`clean_mode` 값으로 로봇을 움직입니다. `tick`은 FALSE부터 TRUE/FALSE로 번갈아 들어갑니다. 스텝 수는 직접 정합니다.
+- 동작 규칙: tick = TRUE 상태의 모터 값으로 한 클럭에 한 번 움직입니다 (전진/후진 1칸, 막혀 있으면 제자리에서 충돌로 표시, 회전 동작이 시작될 때 90° 회전). 청소 중 값(`clean_on`, `clean_up`)이면 현재 칸을 청소한 칸으로 세고, 먼지 제거 값(`clean_up`)이면 현재 칸의 먼지를 없앱니다.
+- 끝나면 NuSMV가 저장한 trace를 `show_traces -v`로 받아 파싱하고, 맵 위에서 경로, 센서 방향, 남은 먼지 수, 청소한 칸 수, 각 스텝의 변수 값을 애니메이션으로 재생합니다. 같은 trace를 시뮬레이터 탭의 FSM이나 표로도 볼 수 있습니다.
+- 변수 이름과 값 이름은 **변수 · 값 매핑**에서 바꿀 수 있습니다 (기본값은 `tick`, `sensor.front`…, `motor.motor`, `cleaner.clean_mode`).
+- 탭 아래 **NuSMV 터미널 로그**에 시뮬레이션 중 보낸 명령(`pick_state`, `simulate`, `print_current_state`)과 NuSMV 출력이 실시간으로 쌓입니다.
+
+![그리드 맵](docs/grid.png)
+
+### 5. 콘솔
 NuSMV와 주고받은 원본 입출력을 모두 볼 수 있고, 임의의 NuSMV 명령을 직접 보낼 수도 있습니다.
 
 ## NuSMV 바이너리
@@ -144,7 +155,7 @@ CI는 Linux/macOS/Windows에서 NuSMV 공식 바이너리를 내려받아 실제
 
 ### English
 
-**SMV TraceLab** drives a real `NuSMV -int` process from your browser: it answers `simulate -i` / `pick_state -i` choice prompts with the state you click, renders traces as a table and as an (optionally abstracted) FSM graph with step-by-step playback (one FSM per component, all declared states shown, plus a clock/input waveform for `positive_edge`-gated models), and checks CTL/LTL/INVAR properties, letting you replay counterexamples and branch from any step (`goto_state`) to keep simulating.
+**SMV TraceLab** drives a real `NuSMV -int` process from your browser: it answers `simulate -i` / `pick_state -i` choice prompts with the state you click, renders traces as a table and as an (optionally abstracted) FSM graph with step-by-step playback (one FSM per component, all declared states shown, plus a clock/input waveform for `positive_edge`-gated models), and checks CTL/LTL/INVAR properties, letting you replay counterexamples and branch from any step (`goto_state`) to keep simulating. A **Grid Map** tab runs a robot-vacuum model in closed loop on a random 10×10 map (sensors computed from the robot's cell are fed to `simulate -c` every step) and animates the resulting trace.
 
 ```bash
 uvx --from git+https://github.com/sontouf/smv-tracelab smv-tracelab        # NuSMV is downloaded on first run

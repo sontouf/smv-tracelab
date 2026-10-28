@@ -1,0 +1,75 @@
+-- Clocked robot vacuum for the Grid Map tab. The sensors and the clock are free
+-- state variables: the grid simulation fixes them every step with `simulate -c`
+-- (tick alternates FALSE/TRUE, sensors come from the robot's cell on the map).
+-- Components update on the positive edge (tick = FALSE).
+MODULE main
+VAR
+  tick    : boolean;
+  sensor  : Sensor;
+  ctrl    : Controller(!tick, sensor.front, sensor.left, sensor.right, sensor.dust);
+  motor   : Motor(!tick, ctrl.next_mode);
+  cleaner : Cleaner(!tick, ctrl.next_mode);
+ASSIGN
+  init(tick) := FALSE;
+
+-- Dust under the robot is always sucked up on the next clock cycle.
+LTLSPEC NAME dust_cleaned := G (!tick & sensor.dust -> X cleaner.clean_mode = clean_up)
+-- The robot never drives forward into a blocked cell.
+LTLSPEC NAME no_crash := G (!tick & sensor.front & !sensor.dust -> X motor.motor != moveforward)
+
+MODULE Sensor
+VAR
+  front : boolean;
+  left  : boolean;
+  right : boolean;
+  dust  : boolean;
+
+MODULE Controller(enable, front, left, right, dust)
+VAR
+  mode : {Forward, Suck, TurnLeft, TurnRight, Backward};
+DEFINE
+  next_mode :=
+    case
+      dust            : Suck;
+      !front          : Forward;
+      !left           : TurnLeft;
+      !right          : TurnRight;
+      TRUE            : Backward;
+    esac;
+ASSIGN
+  init(mode) := Forward;
+  next(mode) :=
+    case
+      enable : next_mode;
+      TRUE   : mode;
+    esac;
+
+MODULE Motor(enable, mode)
+CONSTANTS Forward, Suck, TurnLeft, TurnRight, Backward;
+VAR
+  motor : {moveforward, movebackward, turnleft, turnright, motorstop};
+ASSIGN
+  init(motor) := motorstop;
+  next(motor) :=
+    case
+      !enable            : motor;
+      mode = Forward     : moveforward;
+      mode = TurnLeft    : turnleft;
+      mode = TurnRight   : turnright;
+      mode = Backward    : movebackward;
+      TRUE               : motorstop;
+    esac;
+
+MODULE Cleaner(enable, mode)
+CONSTANTS Forward, Suck, TurnLeft, TurnRight, Backward;
+VAR
+  clean_mode : {clean_off, clean_on, clean_up};
+ASSIGN
+  init(clean_mode) := clean_off;
+  next(clean_mode) :=
+    case
+      !enable        : clean_mode;
+      mode = Suck    : clean_up;
+      mode = Forward : clean_on;
+      TRUE           : clean_off;
+    esac;

@@ -88,11 +88,12 @@ td.future{opacity:.4}
 .seg button{border-radius:0;margin-left:-1px}
 .seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}
 .seg button:last-child{border-radius:0 6px 6px 0}
-#console{background:#0f1217;color:#cfd6e3;font:12px/1.45 var(--mono);border-radius:8px;padding:10px;height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:8px}
-#console .cmd{color:#7fb4ff}
-#console .cmd::before{content:"NuSMV > ";color:#5d6b82}
-#console .err{color:#ff8080}
-#console .info{color:#8fd19e}
+#console,#gConsole{background:#0f1217;color:#cfd6e3;font:12px/1.45 var(--mono);border-radius:8px;padding:10px;height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:8px}
+#gConsole{height:320px}
+:is(#console,#gConsole) .cmd{color:#7fb4ff}
+:is(#console,#gConsole) .cmd::before{content:"NuSMV > ";color:#5d6b82}
+:is(#console,#gConsole) .err{color:#ff8080}
+:is(#console,#gConsole) .info{color:#8fd19e}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center;margin-bottom:8px}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
 .empty{color:var(--muted);padding:20px;text-align:center;font-size:13px}
@@ -137,6 +138,49 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
 .wv-tick{fill:var(--muted);font:10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .wv-tick.cur{fill:var(--accent);font-weight:700}
 .wv-grid{stroke:var(--line);stroke-width:1}
+/* tabs */
+.tabs{display:flex;gap:2px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 14px;color:var(--muted);font-weight:600}
+.tabs button:hover:not(:disabled){color:var(--text);border-color:var(--line)}
+.tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+[hidden]{display:none!important}
+/* grid map */
+.gmain{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+#gMapWrap{flex:1 1 420px;max-width:620px;min-width:0}
+#gMap{width:100%;height:auto;display:block;user-select:none}
+#gMap .cell{fill:var(--panel);stroke:var(--line);stroke-width:1}
+#gMap .cell.clean{fill:var(--ok-soft)}
+#gMap .cell.edit{cursor:pointer}
+#gMap .cell.edit:hover{fill:var(--accent-soft)}
+#gMap .obs{fill:var(--text);opacity:.82;pointer-events:none}
+#gMap .wall{fill:var(--muted);opacity:.35}
+#gMap .frame{fill:none;stroke:var(--text);stroke-width:3}
+#gMap .dust{fill:#a0672a;pointer-events:none}
+#gMap .dust.gone{fill:none;stroke:#a0672a;stroke-dasharray:3 3;opacity:.6}
+#gMap .axis{fill:var(--muted);font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-anchor:middle}
+#gMap .trail{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;opacity:.35;pointer-events:none}
+#gMap .robot{fill:var(--accent);stroke:var(--panel);stroke-width:2;pointer-events:none;transition:transform .12s linear}
+#gMap .nose{fill:#fff;pointer-events:none}
+#gMap .ray{fill:none;stroke-width:3;pointer-events:none}
+#gMap .ray.hit{stroke:var(--err)}#gMap .ray.free{stroke:var(--ok);stroke-dasharray:5 4;stroke-width:2}
+#gMap .bump{fill:none;stroke:var(--err);stroke-width:3;pointer-events:none}
+.ginfo{flex:1 1 260px;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg)}
+.stat .k{font-size:11.5px;color:var(--muted)}
+.stat .v{font:600 20px var(--mono);font-variant-numeric:tabular-nums}
+.stat .v small{font-size:12px;color:var(--muted);font-weight:400}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px}
+.chip{font:600 11.5px var(--mono);padding:2px 8px;border-radius:999px;background:var(--pend);color:var(--muted)}
+.chip.t{background:var(--err-soft);color:var(--err)}
+.chip.clk{background:var(--accent-soft);color:var(--accent)}
+.gevent{font:12.5px var(--mono);padding:6px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--line);margin-bottom:8px;min-height:30px}
+.gvars{max-height:280px}
+.gvars td.vname{color:var(--muted)}
+.gbar{height:6px;border-radius:3px;background:var(--pend);overflow:hidden;margin-top:8px}
+.gbar>div{height:100%;background:var(--accent);width:0}
+.mapgrid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;align-items:center}
+.mapgrid label{margin:0}
 </style>
 <style id="fsmCss">
 .fn rect{fill:var(--panel);stroke:var(--faint);stroke-width:1.2}
@@ -173,8 +217,12 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
   <span class="badge" id="modeBadge">—</span>
   <span class="sub" id="hdrSub"></span>
 </header>
+<nav class="tabs" role="tablist">
+  <button class="on" data-tab="sim" role="tab">시뮬레이터</button>
+  <button data-tab="grid" role="tab">그리드 맵</button>
+</nav>
 
-<div class="layout">
+<div class="layout" id="tabSim">
 <aside>
   <div class="panel">
     <h2>모델</h2>
@@ -343,6 +391,95 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
 </main>
 </div>
 
+<div class="layout" id="tabGrid" hidden>
+<aside>
+  <div class="panel">
+    <h2>맵 <span class="hint">10 × 10, 바깥은 벽</span></h2>
+    <div class="mapgrid">
+      <label for="gSeed">시드</label><input type="text" id="gSeed" placeholder="비우면 무작위">
+      <label for="gNObs">장애물</label><input type="number" id="gNObs" value="20" min="0" max="80">
+      <label for="gNDust">먼지</label><input type="number" id="gNDust" value="5" min="0" max="50">
+    </div>
+    <div class="row mt"><button class="primary" id="gGen">랜덤 맵 생성</button></div>
+    <div class="muted mt" style="font-size:12px">먼지는 장애물과 겹치지 않고 (0,0)에서 도달 가능한 칸에 놓입니다. 셀 클릭으로 빈칸 → 장애물 → 먼지 → 빈칸 순으로 직접 바꿀 수 있습니다.</div>
+  </div>
+
+  <div class="panel">
+    <h2>실행 <span class="hint">sensor → simulate -c → motor</span></h2>
+    <div class="mapgrid">
+      <label>시작 위치</label><span style="font:13px var(--mono)">(0, 0)</span>
+      <label for="gHead">시작 방향</label>
+      <select id="gHead"><option value="N">N ↑ (+y)</option><option value="E" selected>E → (+x)</option><option value="S">S ↓ (−y)</option><option value="W">W ← (−x)</option></select>
+      <label for="gSteps">스텝 수</label><input type="number" id="gSteps" value="300" min="1" max="5000">
+    </div>
+    <div class="row mt">
+      <button class="primary" id="gRun">시뮬레이션 실행</button>
+      <button class="fix danger" id="gStop">중지</button>
+    </div>
+    <div class="gbar"><div id="gProg"></div></div>
+    <div class="muted mt" style="font-size:12px" id="gStatus"></div>
+    <details class="mt">
+      <summary>변수 · 값 매핑</summary>
+      <div class="mapgrid mt" id="gMapping"></div>
+      <div class="muted mt" style="font-size:12px">tick 은 FALSE 부터 TRUE/FALSE 로 번갈아 입력됩니다. 로봇은 tick = TRUE 상태의 모터·청소 값으로 한 클럭에 한 번 움직입니다 (전진/후진 1칸, 회전은 회전 동작이 시작될 때 90°). 먼지 제거 모드 값일 때 현재 칸의 먼지가 없어집니다.</div>
+      <div class="row mt"><button class="sm" id="gMapReset">기본값</button></div>
+    </details>
+  </div>
+</aside>
+
+<main style="min-width:0">
+  <div id="gErr" style="display:none;background:var(--err-soft);color:var(--err);border:1px solid var(--err);border-radius:8px;padding:8px 12px;margin-bottom:14px;white-space:pre-wrap;font-size:13px"></div>
+  <div class="panel">
+    <div class="toolbar">
+      <h2 style="margin:0">그리드 맵 <span class="hint" id="gModel"></span></h2>
+      <span class="grow"></span>
+      <button class="sm" id="gToTrace" title="이 실행의 trace 를 시뮬레이터 탭의 표/FSM 으로 봅니다">Trace 탭에서 보기</button>
+    </div>
+    <div class="play">
+      <button class="sm" id="gFirst" title="처음">⏮</button>
+      <button class="sm" id="gPrev" title="이전 (←)">◀</button>
+      <button class="sm" id="gPlay" title="재생/정지 (Space)" style="min-width:52px">▶ 재생</button>
+      <button class="sm" id="gNext" title="다음 (→)">▶</button>
+      <button class="sm" id="gLast" title="끝">⏭</button>
+      <input type="range" id="gRange" min="0" max="0" value="0" aria-label="스텝">
+      <span class="pos" id="gPos">—</span>
+      <select id="gSpeed" style="width:auto" aria-label="재생 속도"><option value="400">느리게</option><option value="150" selected>보통</option><option value="50">빠르게</option><option value="10">매우 빠르게</option></select>
+    </div>
+    <div class="gmain">
+      <div id="gMapWrap"><svg id="gMap" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="ginfo">
+        <div class="stats">
+          <div class="stat"><div class="k">남은 먼지</div><div class="v" id="gsDust">—</div></div>
+          <div class="stat"><div class="k">청소한 칸</div><div class="v" id="gsClean">—</div></div>
+          <div class="stat"><div class="k">위치 · 방향</div><div class="v" id="gsPose">—</div></div>
+          <div class="stat"><div class="k">이동 · 충돌</div><div class="v" id="gsMove">—</div></div>
+        </div>
+        <div class="chips" id="gChips"></div>
+        <div class="gevent" id="gEvent"></div>
+        <div class="tablewrap gvars" id="gVars"></div>
+      </div>
+    </div>
+    <div class="legend mt">
+      <span><span class="sw" style="background:var(--text);opacity:.82"></span>장애물</span>
+      <span><span class="sw" style="background:#a0672a;border-radius:50%"></span>먼지</span>
+      <span><span class="sw" style="border:1.5px dashed #a0672a;border-radius:50%"></span>제거된 먼지</span>
+      <span><span class="sw" style="background:var(--ok-soft);border:1px solid var(--line)"></span>청소한 칸</span>
+      <span><span class="sw" style="background:var(--accent);border-radius:50%"></span>로봇 (흰 점 = 앞)</span>
+      <span><span class="sw" style="background:var(--err)"></span>막힘 감지 (front/left/right)</span>
+      <span>파란 선: 지나온 경로</span>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="toolbar" style="margin-bottom:0">
+      <h2 style="margin:0">NuSMV 터미널 로그 <span class="hint">시뮬레이션 중 주고받은 명령과 출력 (pick_state · simulate · print_current_state)</span></h2>
+      <span class="grow"></span>
+      <button class="sm" id="gClearCon">화면 지우기</button>
+    </div>
+    <div id="gConsole"></div>
+  </div>
+</main>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -370,13 +507,20 @@ async function api(path, body){
   maybeAuto();
 }
 function showErr(m){ const e=$('err'); e.textContent=m; e.style.display=m?'block':'none'; }
+const CON_MAX=8000;   // 화면에 남겨 둘 로그 줄 수 (콘솔마다)
 async function pullLog(){
   try{
     const j = await (await fetch('/api/log?from='+logPos)).json();
-    const c = $('console');
     if(j.len < logPos){ logPos = 0; }
-    for(const it of j.items){ const d=document.createElement('div'); d.className=it.kind; d.textContent=it.text; c.appendChild(d); }
-    logPos = j.len; c.scrollTop = c.scrollHeight;
+    for(const c of [$('console'),$('gConsole')]){
+      const follow = c.scrollHeight-c.scrollTop-c.clientHeight < 40 || !c.childElementCount;  // 맨 아래를 보고 있을 때만 따라감
+      const frag=document.createDocumentFragment();
+      for(const it of j.items.slice(-CON_MAX)){ const d=document.createElement('div'); d.className=it.kind; d.textContent=it.text; frag.appendChild(d); }
+      c.appendChild(frag);
+      while(c.childElementCount>CON_MAX) c.firstChild.remove();
+      if(follow) c.scrollTop = c.scrollHeight;
+    }
+    logPos = j.len;
   }catch(e){}
 }
 
@@ -416,7 +560,8 @@ function render(){
   }
   $('simTraceNo').textContent = S.sim_trace ? '#'+S.sim_trace : '—';
   if(!S.model || projModel !== S.model.path){ proj=null; fsmMode=null; clockSel=null; projModel = S.model && S.model.path; fsmPos=new Map(); fsmDragged=false; }
-  renderTraceSel(); renderChoice(); renderVerifier(); renderViewer(); setDisabled();
+  renderTraceSel(); renderChoice(); renderVerifier(); if(tab==='sim') renderViewer(); setDisabled();
+  if(tab==='grid') renderGrid();
 }
 
 function setDisabled(){
@@ -430,6 +575,7 @@ function setDisabled(){
   document.querySelectorAll('.btnChk').forEach(x=>x.disabled=!idle);
   const cols=S?traceColumns():[];
   $('pBranch').disabled=!idle||!cols.length||!cols[cursor]||cols[cursor].pend;
+  renderGridStatus();
 }
 
 /* ---------- choice ---------- */
@@ -1078,8 +1224,15 @@ $('clockSel').onchange=e=>{ clockSel=e.target.value==='__auto'?null:e.target.val
 ['varFilter','showDefines','onlyChanged'].forEach(id=>$(id).addEventListener('input',()=>S&&renderTable(traceColumns())));
 $('btnCsv').onclick=exportCsv;
 $('btnClearCon').onclick=()=>{ $('console').innerHTML=''; };
+$('gClearCon').onclick=()=>{ $('gConsole').innerHTML=''; };
 document.addEventListener('keydown',e=>{
   if(!S||['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(tab==='grid'){
+    if(e.key==='ArrowRight'){ gStopPlay(); gSetCur(gCur+1); e.preventDefault(); }
+    if(e.key==='ArrowLeft'){ gStopPlay(); gSetCur(gCur-1); e.preventDefault(); }
+    if(e.key===' '){ gPlaying?gStopPlay():gStartPlay(); e.preventDefault(); }
+    return;
+  }
   if(S.mode==='single'&&e.key==='Enter'){ api('/api/choose',{}); return; }
   if(S.mode==='choose'&&/^[0-9]$/.test(e.key)&&S.candidates.length<=10){ const c=S.candidates.find(c=>c.index===+e.key); if(c) api('/api/choose',{index:c.index}); return; }
   if(e.key==='ArrowRight'){ stopPlay(); setCursor(cursor+1); e.preventDefault(); }
@@ -1088,11 +1241,241 @@ document.addEventListener('keydown',e=>{
 });
 window.addEventListener('resize',()=>{ if(viewMode!=='table'&&S){ renderWave(traceColumns()); fitFsm(); } });
 
+/* ================= grid map ================= */
+const GW=10, GH=10, GCS=44, GPAD=26;   // 셀 크기, 바깥 벽/축 여백 (SVG 단위)
+const GDIR={N:[0,1],E:[1,0],S:[0,-1],W:[-1,0]}, GLEFT={N:'W',W:'S',S:'E',E:'N'}, GRIGHT={N:'E',E:'S',S:'W',W:'N'};
+const GMAP_DEFAULT={tick:'tick',front:'sensor.front',left:'sensor.left',right:'sensor.right',dust:'sensor.dust',
+  motor:'motor.motor',clean:'cleaner.clean_mode',forward:'moveforward',backward:'movebackward',turn_left:'turnleft',turn_right:'turnright',
+  cleaning:'clean_on,clean_up',removing:'clean_up'};
+const GMAP_LABEL={tick:'클럭 tick',front:'센서 front',left:'센서 left',right:'센서 right',dust:'센서 dust',motor:'모터 변수',clean:'청소 변수',
+  forward:'전진 값',backward:'후진 값',turn_left:'좌회전 값',turn_right:'우회전 값',cleaning:'청소 중 값',removing:'먼지 제거 값'};
+let gMap=null, gRes=null, gCur=0, gPlaying=null, gLastId=null, gPolling=false, tab='sim';
+
+function gJson(k,d){ try{ return JSON.parse(localGet(k,'')) || d; }catch(e){ return d; } }
+function gMapping(){ const m={...GMAP_DEFAULT}; document.querySelectorAll('#gMapping input').forEach(i=>m[i.dataset.k]=i.value.trim()); return m; }
+function renderMappingForm(m){
+  $('gMapping').innerHTML=Object.keys(GMAP_DEFAULT).map(k=>`<label for="gm_${k}">${GMAP_LABEL[k]}</label><input type="text" id="gm_${k}" data-k="${k}" value="${esc(m[k]??GMAP_DEFAULT[k])}">`).join('');
+  document.querySelectorAll('#gMapping input').forEach(i=>i.onchange=()=>localSet('gridMapping',JSON.stringify(gMapping())));
+}
+function mulberry32(a){ return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function seedOf(str){ let h=2166136261; for(const ch of String(str)){ h^=ch.charCodeAt(0); h=Math.imul(h,16777619); } return h>>>0; }
+const gKey=(x,y)=>x+','+y;
+function gReach(obs){
+  const seen=new Set([gKey(0,0)]), q=[[0,0]];
+  while(q.length){ const [x,y]=q.shift(); for(const [dx,dy] of Object.values(GDIR)){ const nx=x+dx, ny=y+dy, k=gKey(nx,ny);
+    if(nx<0||ny<0||nx>=GW||ny>=GH||obs.has(k)||seen.has(k)) continue; seen.add(k); q.push([nx,ny]); } }
+  return seen;
+}
+function genMap(seed,nObs,nDust){
+  const rnd=mulberry32(seedOf(seed));
+  const cells=[]; for(let x=0;x<GW;x++) for(let y=0;y<GH;y++) if(x||y) cells.push([x,y]);
+  nObs=Math.max(0,Math.min(nObs,cells.length-1));
+  for(let attempt=0;attempt<500;attempt++){
+    const a=cells.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+    const obs=a.slice(0,nObs), obsSet=new Set(obs.map(c=>gKey(...c))), reach=gReach(obsSet);
+    const free=a.slice(nObs).filter(c=>reach.has(gKey(...c)));
+    if(free.length<nDust) continue;
+    return {seed:String(seed),obstacles:obs,dust:free.slice(0,nDust)};
+  }
+  throw new Error('조건을 만족하는 맵을 만들지 못했습니다. 장애물/먼지 수를 줄여 보세요.');
+}
+function gShowErr(m){ const e=$('gErr'); e.textContent=m||''; e.style.display=m?'block':'none'; }
+function gSetMap(m, keepResult){
+  gMap=m; localSet('gridMap',JSON.stringify(m));
+  if(!keepResult){ gStopPlay(); gRes=null; gCur=0; }
+  renderGrid();
+}
+
+/* 프레임 i 시점의 누적 상태: 먼지/청소 칸/경로/이동·충돌 횟수 */
+function gStateAt(i){
+  const dust=new Set(gMap.dust.map(c=>gKey(...c))), cleaned=new Set(), trail=[];
+  let moves=0, bumps=0;
+  if(!gRes||!gRes.frames) return {dust,cleaned,trail,moves,bumps,f:null};
+  const fr=gRes.frames;
+  for(let k=0;k<=i&&k<fr.length;k++){
+    const f=fr[k]; const last=trail[trail.length-1];
+    if(!last||last[0]!==f.x||last[1]!==f.y) trail.push([f.x,f.y]);
+    if(k===i) break;
+    const e=f.event||{};
+    if(e.cleaned) cleaned.add(gKey(...e.cleaned));
+    if(e.removed) dust.delete(gKey(...e.removed));
+    if(e.move) moves++;
+    if(e.bump) bumps++;
+  }
+  return {dust,cleaned,trail,moves,bumps,f:fr[i]};
+}
+const gx=x=>GPAD+x*GCS, gy=y=>GPAD+(GH-1-y)*GCS;   // y 는 위로 증가, (0,0) = 왼쪽 아래
+
+function renderGrid(){
+  if(!gMap) return;
+  const svg=$('gMap'), size=GPAD*2+GW*GCS;
+  svg.setAttribute('viewBox',`0 0 ${size} ${size}`);
+  const running=S&&S.grid&&S.grid.status==='running';
+  const editable=!running;
+  const live=running&&S.grid.pose;
+  const st=gStateAt(gCur), f=st.f;
+  const obs=new Set(gMap.obstacles.map(c=>gKey(...c))), allDust=gMap.dust.map(c=>gKey(...c));
+  let h=`<rect class="wall" x="0" y="0" width="${size}" height="${size}"/>`;
+  for(let x=0;x<GW;x++) for(let y=0;y<GH;y++){
+    const k=gKey(x,y);
+    h+=`<rect class="cell${st.cleaned.has(k)?' clean':''}${editable?' edit':''}" data-x="${x}" data-y="${y}" x="${gx(x)}" y="${gy(y)}" width="${GCS}" height="${GCS}"/>`;
+    if(obs.has(k)) h+=`<rect class="obs" x="${gx(x)+3}" y="${gy(y)+3}" width="${GCS-6}" height="${GCS-6}" rx="4"/>`;
+  }
+  for(const k of allDust){
+    const [x,y]=k.split(',').map(Number), cx=gx(x)+GCS/2, cy=gy(y)+GCS/2;
+    h+=st.dust.has(k)
+      ? [[-7,-5,5],[6,-6,4],[-3,7,4.5],[8,6,3.5],[1,0,3]].map(([dx,dy,r])=>`<circle class="dust" cx="${cx+dx}" cy="${cy+dy}" r="${r}"/>`).join('')
+      : `<circle class="dust gone" cx="${cx}" cy="${cy}" r="${GCS/2-8}"/>`;
+  }
+  h+=`<rect class="frame" x="${GPAD}" y="${GPAD}" width="${GW*GCS}" height="${GH*GCS}"/>`;
+  for(let i=0;i<GW;i++) h+=`<text class="axis" x="${gx(i)+GCS/2}" y="${size-8}">${i}</text>`;
+  for(let i=0;i<GH;i++) h+=`<text class="axis" x="${GPAD/2}" y="${gy(i)+GCS/2+4}">${i}</text>`;
+  if(st.trail.length>1) h+=`<polyline class="trail" points="${st.trail.map(([x,y])=>`${gx(x)+GCS/2},${gy(y)+GCS/2}`).join(' ')}"/>`;
+  // 로봇: 결과 프레임 > 실행 중 위치 > 시작 위치
+  const pose=f?{x:f.x,y:f.y,h:f.h}:live?{x:live.x,y:live.y,h:live.h}:{x:0,y:0,h:$('gHead').value};
+  const cx=gx(pose.x)+GCS/2, cy=gy(pose.y)+GCS/2;
+  if(f){ // 센서 방향 표시: 막힘(빨강) / 열림(초록 점선)
+    for(const [name,dir] of [['front',pose.h],['left',GLEFT[pose.h]],['right',GRIGHT[pose.h]]]){
+      const [dx,dy]=GDIR[dir], hit=f.sense[name];
+      const ex=cx+dx*GCS*(hit?.5:.9), ey=cy-dy*GCS*(hit?.5:.9);
+      h+=`<line class="ray ${hit?'hit':'free'}" x1="${cx+dx*GCS*.32}" y1="${cy-dy*GCS*.32}" x2="${ex}" y2="${ey}"/>`;
+    }
+    const e=f.event||{};
+    if(e.bump) h+=`<circle class="bump" cx="${cx}" cy="${cy}" r="${GCS*.46}"/>`;
+  }
+  const [dx,dy]=GDIR[pose.h];
+  h+=`<circle class="robot" cx="${cx}" cy="${cy}" r="${GCS*.34}"/><circle class="nose" cx="${cx+dx*GCS*.2}" cy="${cy-dy*GCS*.2}" r="${GCS*.08}"/>`;
+  svg.innerHTML=h;
+  if(editable) svg.querySelectorAll('rect.cell').forEach(r=>r.onclick=()=>gEditCell(+r.dataset.x,+r.dataset.y));
+  renderGridInfo(st, live);
+}
+function gEditCell(x,y){
+  if(!x&&!y) return gShowErr('(0,0) 은 로봇 시작 위치라 바꿀 수 없습니다.');
+  const k=gKey(x,y), obs=gMap.obstacles.filter(c=>gKey(...c)!==k), dust=gMap.dust.filter(c=>gKey(...c)!==k);
+  const wasObs=obs.length!==gMap.obstacles.length, wasDust=dust.length!==gMap.dust.length;
+  if(!wasObs&&!wasDust) obs.push([x,y]); else if(wasObs) dust.push([x,y]);
+  gShowErr(''); gSetMap({...gMap,seed:gMap.seed+' (수정)',obstacles:obs,dust});
+}
+function renderGridInfo(st, live){
+  const nFree=GW*GH-gMap.obstacles.length, f=st.f, fr=gRes&&gRes.frames;
+  const dustLeft=f?st.dust.size:live?live.dust_left:gMap.dust.length;
+  $('gsDust').innerHTML=`${dustLeft}<small> / ${gMap.dust.length}</small>`;
+  const cl=f?st.cleaned.size:live?live.cleaned:0;
+  $('gsClean').innerHTML=`${cl}<small> / ${nFree} (${nFree?Math.round(cl*100/nFree):0}%)</small>`;
+  const pose=f||live;
+  $('gsPose').innerHTML=pose?`(${pose.x},${pose.y}) <small>${pose.h}</small>`:`(0,0) <small>${$('gHead').value}</small>`;
+  $('gsMove').innerHTML=f?`${st.moves}<small> · 충돌 ${st.bumps}</small>`:'—';
+  const r=$('gRange'); r.max=fr?Math.max(0,fr.length-1):0; r.value=gCur;
+  $('gPos').textContent=f?`${f.label}  (${gCur+1}/${fr.length})`:'—';
+  if(!f){
+    $('gChips').innerHTML=''; $('gVars').innerHTML='';
+    $('gEvent').textContent=live?`실행 중… ${S.grid.done}/${S.grid.total} 스텝`:'맵을 정하고 "시뮬레이션 실행"을 누르세요. 끝나면 trace 를 파싱해 여기서 순서대로 재생합니다.';
+    return;
+  }
+  const chip=(n,v,cls)=>`<span class="chip ${cls||''}">${n}=${v}</span>`;
+  $('gChips').innerHTML=(f.tick!=null?chip('tick',f.tick,'clk'):'')
+    +['front','left','right','dust'].map(k=>chip(k,f.sense[k]?'T':'F',f.sense[k]?'t':'')).join('')
+    +(f.motor!=null?chip('motor',f.motor,'clk'):'')+(f.clean!=null?chip('clean',f.clean,'clk'):'');
+  const e=f.event||{}, msg=[];
+  if(gCur===fr.length-1) msg.push('마지막 상태');
+  if(e.move) msg.push(e.move==='F'?'전진 1칸':'후진 1칸');
+  if(e.turn) msg.push(e.turn==='L'?'좌회전 90°':'우회전 90°');
+  if(e.bump) msg.push(`충돌: (${e.bump}) 막힘 — 제자리`);
+  if(e.removed) msg.push(`먼지 제거 (${e.removed})`);
+  if(e.cleaned&&!e.removed) msg.push(`청소 (${e.cleaned})`);
+  if(!msg.length) msg.push(f.tick==='FALSE'?'positive edge: 컨트롤러가 센서를 읽고 다음 상태를 정함':'유지');
+  if(f.mismatch&&f.mismatch.length) msg.push('⚠ trace 의 센서 값이 맵과 다름: '+f.mismatch.join(', '));
+  $('gEvent').textContent='→ 다음 전이: '+msg.join(' · ');
+  const prev=gCur>0?fr[gCur-1].vars:null;
+  $('gVars').innerHTML='<table><tbody>'+Object.entries(f.vars).map(([k,v])=>`<tr><td class="vname">${esc(k)}</td><td class="${prev&&prev[k]!==v?'chg':''}">${esc(v)}</td></tr>`).join('')+'</tbody></table>';
+}
+function renderGridStatus(){
+  const g=S&&S.grid, running=g&&g.status==='running';
+  $('gModel').textContent=S&&S.model?'· '+S.model.name:'· 모델 없음';
+  $('gRun').disabled=running||!S||!S.load_ok||S.mode!=='idle'||busy;
+  $('gStop').disabled=!running;
+  $('gGen').disabled=running;
+  $('gToTrace').disabled=running||!gRes||!gRes.trace;
+  $('gProg').style.width=g?(100*g.done/g.total)+'%':'0';
+  const label={running:'실행 중',done:'완료',stopped:'중지됨',deadlock:'데드락으로 중단',error:'오류'};
+  $('gStatus').textContent=!S||!S.load_ok?'시뮬레이터 탭에서 모델을 먼저 로드하세요.'
+    :g?`${label[g.status]||g.status} — ${g.done}/${g.total} 스텝${g.trace?' · trace #'+g.trace:''}`:'';
+  if(g&&g.error&&g.status!=='running') gShowErr(g.error);
+}
+async function gPoll(){
+  if(gPolling) return; gPolling=true;
+  try{
+    while(true){
+      const j=await (await fetch('/api/state')).json();
+      S=j; render();
+      if(!S.grid||S.grid.status!=='running') break;
+      await pullLog();
+      await new Promise(r=>setTimeout(r,300));
+    }
+    if(S.grid&&S.grid.id!==gLastId){
+      gLastId=S.grid.id;
+      gAdopt(await (await fetch('/api/grid')).json());
+      gCur=0; renderGrid(); renderGridStatus(); if(gRes.frames&&gRes.frames.length>1) gStartPlay();
+    }
+  }catch(e){ gShowErr('서버 통신 실패: '+e); }
+  finally{ gPolling=false; pullLog(); }
+}
+async function gRun(){
+  gShowErr(''); gStopPlay();
+  const body={obstacles:gMap.obstacles,dust:gMap.dust,start:[0,0],heading:$('gHead').value,steps:+$('gSteps').value||1,mapping:gMapping()};
+  try{
+    const j=await (await fetch('/api/grid/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    S=j; if(j.error){ gShowErr(j.error); render(); return; }
+    gRes=null; gCur=0; render(); gPoll();
+  }catch(e){ gShowErr('서버 통신 실패: '+e); }
+}
+function gAdopt(r){  // 실행 결과와 그 실행에 쓰인 맵을 함께 보여준다
+  if(!r||!r.frames) return;
+  gRes=r; gMap={...gMap,obstacles:r.args.obstacles,dust:r.args.dust}; $('gHead').value=r.args.heading;
+}
+function gSetCur(i){ const n=gRes&&gRes.frames?gRes.frames.length:0; if(!n) return; gCur=Math.max(0,Math.min(n-1,i)); renderGrid(); }
+function gStartPlay(){
+  const n=gRes&&gRes.frames?gRes.frames.length:0; if(n<2) return;
+  if(gCur>=n-1) gCur=0;
+  $('gPlay').textContent='⏸ 정지';
+  const step=()=>{ if(gCur>=n-1){ gStopPlay(); return; } gSetCur(gCur+1); gPlaying=setTimeout(step,+$('gSpeed').value); };
+  renderGrid(); gPlaying=setTimeout(step,+$('gSpeed').value);
+}
+function gStopPlay(){ if(gPlaying) clearTimeout(gPlaying); gPlaying=null; $('gPlay').textContent='▶ 재생'; }
+function setTab(t){
+  tab=t; localSet('tab',t);
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  $('tabSim').hidden=t!=='sim'; $('tabGrid').hidden=t!=='grid';
+  if(t==='sim'){ gStopPlay(); if(S) renderViewer(); } else { stopPlay(); renderGrid(); }
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+$('gGen').onclick=()=>{
+  const seed=$('gSeed').value.trim()||String(Math.floor(Math.random()*1e6));
+  try{ gShowErr(''); gSetMap(genMap(seed,+$('gNObs').value||0,+$('gNDust').value||0)); $('gSeed').value=seed; }catch(e){ gShowErr(e.message); }
+};
+$('gSeed').onkeydown=e=>{ if(e.key==='Enter') $('gGen').click(); };
+$('gHead').onchange=()=>{ if(gRes){ gStopPlay(); gRes=null; gCur=0; } renderGrid(); };
+$('gRun').onclick=gRun;
+$('gStop').onclick=async()=>{ try{ await fetch('/api/grid/stop',{method:'POST',body:'{}'}); }catch(e){} };
+$('gMapReset').onclick=()=>{ renderMappingForm(GMAP_DEFAULT); localSet('gridMapping',JSON.stringify(GMAP_DEFAULT)); };
+$('gFirst').onclick=()=>{ gStopPlay(); gSetCur(0); };
+$('gPrev').onclick=()=>{ gStopPlay(); gSetCur(gCur-1); };
+$('gNext').onclick=()=>{ gStopPlay(); gSetCur(gCur+1); };
+$('gLast').onclick=()=>{ gStopPlay(); gSetCur(1e9); };
+$('gPlay').onclick=()=>gPlaying?gStopPlay():gStartPlay();
+$('gRange').oninput=e=>{ gStopPlay(); gSetCur(+e.target.value); };
+$('gToTrace').onclick=async()=>{ if(!gRes||!gRes.trace) return; setTab('sim'); await api('/api/view',{number:gRes.trace}); };
+renderMappingForm(gJson('gridMapping',GMAP_DEFAULT));
+
 (async()=>{
   await loadModels();
   await api('/api/state');
   if(S&&S.model){ $('modelPath').value=S.model.uploaded?'':S.model.path; loadSource(); }
   setInterval(()=>{ if(S&&S.mode==='busy'&&!busy) api('/api/state'); },1000);
+  gSetMap(gJson('gridMap',null)||genMap('1',20,5));
+  $('gSeed').value=gMap.seed;
+  if(S&&S.grid){ if(S.grid.status==='running') gPoll(); else { gLastId=S.grid.id; gAdopt(await (await fetch('/api/grid')).json()); } }
+  setTab(localGet('tab','sim'));
 })();
 </script>
 </body>
