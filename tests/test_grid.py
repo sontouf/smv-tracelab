@@ -36,6 +36,13 @@ def test_turn_rotates_once_per_turn():
     assert w.pos == (0, 0)                                       # wall behind
 
 
+def test_backward_marks_cell_cleaned():
+    w = World(obstacles=[], dust=[], start=(1, 0), heading='E')
+    assert w.act(st('movebackward')) == {'cleaned': [1, 0], 'move': 'B'}
+    assert w.pos == (0, 0) and w.cleaned == {(1, 0)}
+    assert w.act(st('movebackward')) == {'cleaned': [0, 0], 'bump': [-1, 0]}
+
+
 def test_invalid_maps():
     with pytest.raises(GridError):
         World(obstacles=[(0, 0)], dust=[])

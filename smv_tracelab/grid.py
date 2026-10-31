@@ -101,7 +101,8 @@ class World:
         if not self.acts(state):
             return ev
         motor, clean = state.get(self.m['motor']), state.get(self.m['clean'])
-        if clean in self.cleaning:
+        # backing out of a dead end (cleaner off) still counts the cell being left as covered
+        if clean in self.cleaning or motor == self.m['backward']:
             self.cleaned.add(self.pos)
             ev['cleaned'] = list(self.pos)
         if clean in self.removing and self.pos in self.dust_left:
