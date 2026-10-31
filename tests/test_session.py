@@ -120,6 +120,20 @@ def test_clocked_components_full_domains_and_counterexample(s):
     assert st['trace']['type'] == 'Counterexample' and st['trace']['loops']
 
 
+def test_grid_custom_start(s):
+    import time
+    st = s.load(path='grid_vacuum.smv')
+    assert st['load_ok'], st['load_output']
+    s.grid_start({'obstacles': [[0, 0]], 'dust': [], 'start': [5, 7], 'heading': 'N', 'steps': 10})
+    end = time.time() + 60
+    while s.grid_running and time.time() < end:
+        time.sleep(0.05)
+    g = s.grid_result()
+    assert g['status'] == 'done', g['error']
+    assert (g['frames'][0]['x'], g['frames'][0]['y']) == (5, 7)
+    assert not any(f['mismatch'] for f in g['frames'])
+
+
 def test_grid_closed_loop(s):
     import time
     st = s.load(path='grid_vacuum.smv')

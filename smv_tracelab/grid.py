@@ -67,6 +67,7 @@ class World:
         self.dust_left = set(self.dust)
         self.cleaned = set()
         self.turning = None  # motor value of the turn in progress (rotate once per turn)
+        self.edge_cell = None  # cell the robot was on at the last tick = TRUE state
 
     def blocked(self, x, y):
         return not (0 <= x < W and 0 <= y < H) or (x, y) in self.obstacles
@@ -98,10 +99,18 @@ class World:
     def act(self, state):
         """Apply the actuators of `state` (one transition). Returns a short event dict."""
         ev = {}
-        if not self.acts(state):
-            return ev
         motor, clean = state.get(self.m['motor']), state.get(self.m['clean'])
-        if clean in self.cleaning:
+        if not self.acts(state):
+            # A model that latches on the tick = TRUE edge sensed `edge_cell` while the robot was
+            # still leaving it, so the removal mode it chose there applies to that cell.
+            if clean in self.removing and self.edge_cell in self.dust_left:
+                self.dust_left.discard(self.edge_cell)
+                self.cleaned.add(self.edge_cell)
+                ev['removed'] = ev['cleaned'] = list(self.edge_cell)
+            return ev
+        self.edge_cell = self.pos
+        # backing out of a dead end (cleaner off) still counts the cell being left as covered
+        if clean in self.cleaning or motor == self.m['backward']:
             self.cleaned.add(self.pos)
             ev['cleaned'] = list(self.pos)
         if clean in self.removing and self.pos in self.dust_left:

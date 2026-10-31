@@ -401,17 +401,19 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
       <label for="gNDust">먼지</label><input type="number" id="gNDust" value="5" min="0" max="50">
     </div>
     <div class="row mt"><button class="primary" id="gGen">랜덤 맵 생성</button></div>
-    <div class="muted mt" style="font-size:12px">먼지는 장애물과 겹치지 않고 (0,0)에서 도달 가능한 칸에 놓입니다. 셀 클릭으로 빈칸 → 장애물 → 먼지 → 빈칸 순으로 직접 바꿀 수 있습니다.</div>
+    <div class="muted mt" style="font-size:12px">먼지는 장애물과 겹치지 않고 시작 위치에서 도달 가능한 칸에 놓입니다. 셀 클릭으로 빈칸 → 장애물 → 먼지 → 빈칸 순으로 직접 바꿀 수 있습니다. Shift+클릭하면 그 칸이 로봇 시작 위치가 됩니다.</div>
   </div>
 
   <div class="panel">
     <h2>실행 <span class="hint">sensor → simulate -c → motor</span></h2>
     <div class="mapgrid">
-      <label>시작 위치</label><span style="font:13px var(--mono)">(0, 0)</span>
+      <label for="gStartX">시작 위치</label>
+      <span style="display:flex;align-items:center;gap:4px;min-width:0;font:13px var(--mono)">x<input type="number" id="gStartX" value="0" min="0" max="9" step="1" aria-label="시작 x" style="min-width:0;flex:1">y<input type="number" id="gStartY" value="0" min="0" max="9" step="1" aria-label="시작 y" style="min-width:0;flex:1"></span>
       <label for="gHead">시작 방향</label>
       <select id="gHead"><option value="N">N ↑ (+y)</option><option value="E" selected>E → (+x)</option><option value="S">S ↓ (−y)</option><option value="W">W ← (−x)</option></select>
       <label for="gSteps">스텝 수</label><input type="number" id="gSteps" value="300" min="1" max="5000">
     </div>
+    <div class="muted mt" style="font-size:12px;color:var(--err)" id="gStartNote" hidden></div>
     <div class="row mt">
       <button class="primary" id="gRun">시뮬레이션 실행</button>
       <button class="fix danger" id="gStop">중지</button>
@@ -421,7 +423,7 @@ details>summary{cursor:pointer;color:var(--muted);font-size:12px}
     <details class="mt">
       <summary>변수 · 값 매핑</summary>
       <div class="mapgrid mt" id="gMapping"></div>
-      <div class="muted mt" style="font-size:12px">tick 은 FALSE 부터 TRUE/FALSE 로 번갈아 입력됩니다. 로봇은 tick = TRUE 상태의 모터·청소 값으로 한 클럭에 한 번 움직입니다 (전진/후진 1칸, 회전은 회전 동작이 시작될 때 90°). 먼지 제거 모드 값일 때 현재 칸의 먼지가 없어집니다.</div>
+      <div class="muted mt" style="font-size:12px">tick 은 FALSE 부터 TRUE/FALSE 로 번갈아 입력됩니다. 로봇은 tick = TRUE 상태의 모터·청소 값으로 한 클럭에 한 번 움직입니다 (전진/후진 1칸, 회전은 회전 동작이 시작될 때 90°). 먼지 제거 모드 값일 때 현재 칸의 먼지가 없어지고, 다음 tick = FALSE 상태가 먼지 제거 모드로 바뀌면 직전 tick = TRUE 때 있던 칸의 먼지도 없어집니다.</div>
       <div class="row mt"><button class="sm" id="gMapReset">기본값</button></div>
     </details>
   </div>
@@ -1260,22 +1262,22 @@ function renderMappingForm(m){
 function mulberry32(a){ return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function seedOf(str){ let h=2166136261; for(const ch of String(str)){ h^=ch.charCodeAt(0); h=Math.imul(h,16777619); } return h>>>0; }
 const gKey=(x,y)=>x+','+y;
-function gReach(obs){
-  const seen=new Set([gKey(0,0)]), q=[[0,0]];
+function gReach(obs,[sx,sy]){
+  const seen=new Set([gKey(sx,sy)]), q=[[sx,sy]];
   while(q.length){ const [x,y]=q.shift(); for(const [dx,dy] of Object.values(GDIR)){ const nx=x+dx, ny=y+dy, k=gKey(nx,ny);
     if(nx<0||ny<0||nx>=GW||ny>=GH||obs.has(k)||seen.has(k)) continue; seen.add(k); q.push([nx,ny]); } }
   return seen;
 }
-function genMap(seed,nObs,nDust){
+function genMap(seed,nObs,nDust,start=[0,0]){
   const rnd=mulberry32(seedOf(seed));
-  const cells=[]; for(let x=0;x<GW;x++) for(let y=0;y<GH;y++) if(x||y) cells.push([x,y]);
+  const cells=[]; for(let x=0;x<GW;x++) for(let y=0;y<GH;y++) if(x!==start[0]||y!==start[1]) cells.push([x,y]);
   nObs=Math.max(0,Math.min(nObs,cells.length-1));
   for(let attempt=0;attempt<500;attempt++){
     const a=cells.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-    const obs=a.slice(0,nObs), obsSet=new Set(obs.map(c=>gKey(...c))), reach=gReach(obsSet);
+    const obs=a.slice(0,nObs), obsSet=new Set(obs.map(c=>gKey(...c))), reach=gReach(obsSet,start);
     const free=a.slice(nObs).filter(c=>reach.has(gKey(...c)));
     if(free.length<nDust) continue;
-    return {seed:String(seed),obstacles:obs,dust:free.slice(0,nDust)};
+    return {seed:String(seed),obstacles:obs,dust:free.slice(0,nDust),start};
   }
   throw new Error('조건을 만족하는 맵을 만들지 못했습니다. 장애물/먼지 수를 줄여 보세요.');
 }
@@ -1283,7 +1285,24 @@ function gShowErr(m){ const e=$('gErr'); e.textContent=m||''; e.style.display=m?
 function gSetMap(m, keepResult){
   gMap=m; localSet('gridMap',JSON.stringify(m));
   if(!keepResult){ gStopPlay(); gRes=null; gCur=0; }
+  gSyncStart();
   renderGrid();
+}
+function gSyncStart(){  // 입력칸과 도달 불가 경고를 gMap 에 맞춘다
+  [$('gStartX').value,$('gStartY').value]=gMap.start;
+  const reach=gReach(new Set(gMap.obstacles.map(c=>gKey(...c))),gMap.start);
+  const lost=gMap.dust.filter(c=>!reach.has(gKey(...c))).length, n=$('gStartNote');
+  n.textContent=lost?`⚠ 먼지 ${lost}개는 이 시작 위치에서 도달할 수 없습니다.`:''; n.hidden=!lost;
+}
+function gSetStart(x,y){
+  if(gMap.obstacles.some(c=>c[0]===x&&c[1]===y)){ gSyncStart(); return gShowErr(`(${x},${y}) 에는 장애물이 있어 시작 위치로 쓸 수 없습니다.`); }
+  gShowErr(''); gSetMap({...gMap,start:[x,y]});
+}
+function gStartInput(){  // 빈 값은 되돌리고, 범위를 벗어난 값은 맵 안으로 맞춘다
+  const read=(id,max)=>{ const v=$(id).value.trim(); return v===''||!Number.isFinite(+v)?null:Math.max(0,Math.min(max,Math.round(+v))); };
+  const x=read('gStartX',GW-1), y=read('gStartY',GH-1);
+  if(x===null||y===null) return gSyncStart();
+  gSetStart(x,y);
 }
 
 /* 프레임 i 시점의 누적 상태: 먼지/청소 칸/경로/이동·충돌 횟수 */
@@ -1332,7 +1351,7 @@ function renderGrid(){
   for(let i=0;i<GH;i++) h+=`<text class="axis" x="${GPAD/2}" y="${gy(i)+GCS/2+4}">${i}</text>`;
   if(st.trail.length>1) h+=`<polyline class="trail" points="${st.trail.map(([x,y])=>`${gx(x)+GCS/2},${gy(y)+GCS/2}`).join(' ')}"/>`;
   // 로봇: 결과 프레임 > 실행 중 위치 > 시작 위치
-  const pose=f?{x:f.x,y:f.y,h:f.h}:live?{x:live.x,y:live.y,h:live.h}:{x:0,y:0,h:$('gHead').value};
+  const pose=f?{x:f.x,y:f.y,h:f.h}:live?{x:live.x,y:live.y,h:live.h}:{x:gMap.start[0],y:gMap.start[1],h:$('gHead').value};
   const cx=gx(pose.x)+GCS/2, cy=gy(pose.y)+GCS/2;
   if(f){ // 센서 방향 표시: 막힘(빨강) / 열림(초록 점선)
     for(const [name,dir] of [['front',pose.h],['left',GLEFT[pose.h]],['right',GRIGHT[pose.h]]]){
@@ -1346,11 +1365,11 @@ function renderGrid(){
   const [dx,dy]=GDIR[pose.h];
   h+=`<circle class="robot" cx="${cx}" cy="${cy}" r="${GCS*.34}"/><circle class="nose" cx="${cx+dx*GCS*.2}" cy="${cy-dy*GCS*.2}" r="${GCS*.08}"/>`;
   svg.innerHTML=h;
-  if(editable) svg.querySelectorAll('rect.cell').forEach(r=>r.onclick=()=>gEditCell(+r.dataset.x,+r.dataset.y));
+  if(editable) svg.querySelectorAll('rect.cell').forEach(r=>r.onclick=e=>e.shiftKey?gSetStart(+r.dataset.x,+r.dataset.y):gEditCell(+r.dataset.x,+r.dataset.y));
   renderGridInfo(st, live);
 }
 function gEditCell(x,y){
-  if(!x&&!y) return gShowErr('(0,0) 은 로봇 시작 위치라 바꿀 수 없습니다.');
+  if(x===gMap.start[0]&&y===gMap.start[1]) return gShowErr(`(${x},${y}) 은 로봇 시작 위치라 바꿀 수 없습니다.`);
   const k=gKey(x,y), obs=gMap.obstacles.filter(c=>gKey(...c)!==k), dust=gMap.dust.filter(c=>gKey(...c)!==k);
   const wasObs=obs.length!==gMap.obstacles.length, wasDust=dust.length!==gMap.dust.length;
   if(!wasObs&&!wasDust) obs.push([x,y]); else if(wasObs) dust.push([x,y]);
@@ -1363,7 +1382,7 @@ function renderGridInfo(st, live){
   const cl=f?st.cleaned.size:live?live.cleaned:0;
   $('gsClean').innerHTML=`${cl}<small> / ${nFree} (${nFree?Math.round(cl*100/nFree):0}%)</small>`;
   const pose=f||live;
-  $('gsPose').innerHTML=pose?`(${pose.x},${pose.y}) <small>${pose.h}</small>`:`(0,0) <small>${$('gHead').value}</small>`;
+  $('gsPose').innerHTML=pose?`(${pose.x},${pose.y}) <small>${pose.h}</small>`:`(${gMap.start[0]},${gMap.start[1]}) <small>${$('gHead').value}</small>`;
   $('gsMove').innerHTML=f?`${st.moves}<small> · 충돌 ${st.bumps}</small>`:'—';
   const r=$('gRange'); r.max=fr?Math.max(0,fr.length-1):0; r.value=gCur;
   $('gPos').textContent=f?`${f.label}  (${gCur+1}/${fr.length})`:'—';
@@ -1395,6 +1414,7 @@ function renderGridStatus(){
   $('gRun').disabled=running||!S||!S.load_ok||S.mode!=='idle'||busy;
   $('gStop').disabled=!running;
   $('gGen').disabled=running;
+  $('gStartX').disabled=$('gStartY').disabled=running;
   $('gToTrace').disabled=running||!gRes||!gRes.trace;
   $('gProg').style.width=g?(100*g.done/g.total)+'%':'0';
   const label={running:'실행 중',done:'완료',stopped:'중지됨',deadlock:'데드락으로 중단',error:'오류'};
@@ -1422,7 +1442,7 @@ async function gPoll(){
 }
 async function gRun(){
   gShowErr(''); gStopPlay();
-  const body={obstacles:gMap.obstacles,dust:gMap.dust,start:[0,0],heading:$('gHead').value,steps:+$('gSteps').value||1,mapping:gMapping()};
+  const body={obstacles:gMap.obstacles,dust:gMap.dust,start:gMap.start,heading:$('gHead').value,steps:+$('gSteps').value||1,mapping:gMapping()};
   try{
     const j=await (await fetch('/api/grid/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
     S=j; if(j.error){ gShowErr(j.error); render(); return; }
@@ -1431,7 +1451,8 @@ async function gRun(){
 }
 function gAdopt(r){  // 실행 결과와 그 실행에 쓰인 맵을 함께 보여준다
   if(!r||!r.frames) return;
-  gRes=r; gMap={...gMap,obstacles:r.args.obstacles,dust:r.args.dust}; $('gHead').value=r.args.heading;
+  gRes=r; gMap={...gMap,obstacles:r.args.obstacles,dust:r.args.dust,start:r.args.start}; $('gHead').value=r.args.heading;
+  gSyncStart();
 }
 function gSetCur(i){ const n=gRes&&gRes.frames?gRes.frames.length:0; if(!n) return; gCur=Math.max(0,Math.min(n-1,i)); renderGrid(); }
 function gStartPlay(){
@@ -1451,10 +1472,11 @@ function setTab(t){
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $('gGen').onclick=()=>{
   const seed=$('gSeed').value.trim()||String(Math.floor(Math.random()*1e6));
-  try{ gShowErr(''); gSetMap(genMap(seed,+$('gNObs').value||0,+$('gNDust').value||0)); $('gSeed').value=seed; }catch(e){ gShowErr(e.message); }
+  try{ gShowErr(''); gSetMap(genMap(seed,+$('gNObs').value||0,+$('gNDust').value||0,gMap.start)); $('gSeed').value=seed; }catch(e){ gShowErr(e.message); }
 };
 $('gSeed').onkeydown=e=>{ if(e.key==='Enter') $('gGen').click(); };
 $('gHead').onchange=()=>{ if(gRes){ gStopPlay(); gRes=null; gCur=0; } renderGrid(); };
+$('gStartX').onchange=$('gStartY').onchange=gStartInput;
 $('gRun').onclick=gRun;
 $('gStop').onclick=async()=>{ try{ await fetch('/api/grid/stop',{method:'POST',body:'{}'}); }catch(e){} };
 $('gMapReset').onclick=()=>{ renderMappingForm(GMAP_DEFAULT); localSet('gridMapping',JSON.stringify(GMAP_DEFAULT)); };
@@ -1472,7 +1494,7 @@ renderMappingForm(gJson('gridMapping',GMAP_DEFAULT));
   await api('/api/state');
   if(S&&S.model){ $('modelPath').value=S.model.uploaded?'':S.model.path; loadSource(); }
   setInterval(()=>{ if(S&&S.mode==='busy'&&!busy) api('/api/state'); },1000);
-  gSetMap(gJson('gridMap',null)||genMap('1',20,5));
+  gSetMap({start:[0,0],...(gJson('gridMap',null)||genMap('1',20,5))});  // 이전 버전에 저장된 맵에는 start 가 없다
   $('gSeed').value=gMap.seed;
   if(S&&S.grid){ if(S.grid.status==='running') gPoll(); else { gLastId=S.grid.id; gAdopt(await (await fetch('/api/grid')).json()); } }
   setTab(localGet('tab','sim'));

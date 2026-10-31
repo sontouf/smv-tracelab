@@ -36,9 +36,56 @@ def test_turn_rotates_once_per_turn():
     assert w.pos == (0, 0)                                       # wall behind
 
 
+def test_backward_marks_cell_cleaned():
+    w = World(obstacles=[], dust=[], start=(1, 0), heading='E')
+    assert w.act(st('movebackward')) == {'cleaned': [1, 0], 'move': 'B'}
+    assert w.pos == (0, 0) and w.cleaned == {(1, 0)}
+    assert w.act(st('movebackward')) == {'cleaned': [0, 0], 'bump': [-1, 0]}
+
+
+def test_dust_removed_when_removal_mode_follows_the_edge():
+    # dust sensed at (1,0) on the edge while the held moveforward already drives off it
+    w = World(obstacles=[], dust=[(1, 0), (3, 0)], start=(1, 0), heading='E')
+    assert w.act(st('moveforward', 'clean_on')) == {'cleaned': [1, 0], 'move': 'F'}
+    assert w.pos == (2, 0) and (1, 0) in w.dust_left
+    assert w.act(st('moveforward', 'clean_up', 'FALSE')) == {'removed': [1, 0], 'cleaned': [1, 0]}
+    assert w.dust_left == {(3, 0)}
+
+
+def test_dust_stays_when_no_removal_mode_follows():
+    w = World(obstacles=[], dust=[(1, 0)], start=(1, 0), heading='E')
+    w.act(st('moveforward', 'clean_on'))
+    assert w.act(st('motorstop', 'clean_off', 'FALSE')) == {}
+    assert w.dust_left == {(1, 0)}
+
+
+def test_removal_mode_before_any_edge_removes_nothing():
+    w = World(obstacles=[], dust=[(0, 0)], heading='E')
+    assert w.act(st('motorstop', 'clean_up', 'FALSE')) == {}
+    assert w.dust_left == {(0, 0)}
+
+
+def test_custom_start():
+    w = World(obstacles=[(0, 0)], dust=[(9, 9)], start=[9, 9], heading='N')
+    assert w.pos == (9, 9)
+    assert w.sense() == {'front': True, 'left': False, 'right': True, 'dust': True}
+    fr = replay({'obstacles': [], 'dust': [], 'start': [5, 4], 'heading': 'E'},
+                [{'label': '1.1', 'input': {}, 'state': st('moveforward')},
+                 {'label': '1.2', 'input': {}, 'state': st('motorstop')}])
+    assert [(f['x'], f['y']) for f in fr] == [(5, 4), (6, 4)]
+
+
+@pytest.mark.parametrize('start', [(10, 0), (0, 10), (-1, 0)])
+def test_start_outside_map(start):
+    with pytest.raises(GridError):
+        World(obstacles=[], dust=[], start=start)
+
+
 def test_invalid_maps():
     with pytest.raises(GridError):
         World(obstacles=[(0, 0)], dust=[])
+    with pytest.raises(GridError):
+        World(obstacles=[(4, 4)], dust=[], start=(4, 4))
     with pytest.raises(GridError):
         World(obstacles=[(3, 3)], dust=[(3, 3)])
     with pytest.raises(GridError):
